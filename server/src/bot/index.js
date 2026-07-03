@@ -1,0 +1,277 @@
+const TelegramBot = require('node-telegram-bot-api');
+const db = require('../db');
+const session = require('./session');
+const { createBooking, addBookingItems, BookingError } = require('../services/bookingService');
+const {
+  getContent,
+  getMenuItems,
+  getMenuCategories,
+  MANAGER_CONTACT,
+  CATEGORY_LABELS,
+} = require('./content');
+
+const PROPERTY_ID = 1;
+const CONSENT_TEXT =
+  'Для оформления брони подтвердите согласие на обработку персональных данных, ' +
+  'условия договора аренды и правила проживания. Нажимая «Согласен», вы принимаете все три документа.';
+const CONSENT_DOCS = ['pd_processing', 'rental_agreement', 'house_rules'];
+
+function mainMenuKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: '📅 Забронировать', callback_data: 'main:book' }],
+      [{ text: '🍳 Меню питания/трансфер', callback_data: 'main:menu' }],
+      [{ text: '📖 Инструкции по квартире', callback_data: 'main:manual' }],
+      [{ text: '🚑 Экстренные службы', callback_data: 'main:emergency' }],
+      [{ text: '🎭 Мероприятия рядом', callback_data: 'main:events' }],
+      [{ text: '👤 Менеджер', callback_data: 'main:manager' }],
+    ],
+  };
+}
+
+function startBot() {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) {
+    console.log('[bot] TELEGRAM_BOT_TOKEN not set, bot not started');
+    return null;
+  }
+
+  const bot = new TelegramBot(token, { polling: true });
+
+  bot.onText(/\/start|\/menu_main/, (msg) => {
+    session.clear(msg.chat.id);
+    bot.sendMessage(msg.chat.id, 'Добро пожаловать в Tvoy Apart 24/7! Выберите действие:', {
+      reply_markup: mainMenuKeyboard(),
+    });
+  });
+
+  bot.onText(/\/book/, (msg) => beginBooking(bot, msg.chat.id));
+  bot.onText(/\/manual/, (msg) => bot.sendMessage(msg.chat.id, getContent(PROPERTY_ID, 'manual')));
+  bot.onText(/\/emergency/, (msg) => bot.sendMessage(msg.chat.id, getContent(PROPERTY_ID, 'emergency')));
+  bot.onText(/\/events/, (msg) => bot.sendMessage(msg.chat.id, getContent(PROPERTY_ID, 'events')));
+  bot.onText(/\/manager/, (msg) => bot.sendMessage(msg.chat.id, MANAGER_CONTACT));
+  bot.onText(/\/cancel/, (msg) => {
+    session.clear(msg.chat.id);
+    bot.sendMessage(msg.chat.id, 'Бронирование отменено.');
+  });
+
+  bot.on('callback_query', async (query) => {
+    const chatId = query.message.chat.id;
+    const data = query.data;
+    await bot.answerCallbackQuery(query.id);
+
+    if (data === 'main:book') return beginBooking(bot, chatId);
+    if (data === 'main:menu') return showMenuBrowse(bot, chatId);
+    if (data === 'main:manual') return bot.sendMessage(chatId, getContent(PROPERTY_ID, 'manual'));
+    if (data === 'main:emergency') return bot.sendMessage(chatId, getContent(PROPERTY_ID, 'emergency'));
+    if (data === 'main:events') return bot.sendMessage(chatId, getContent(PROPERTY_ID, 'events'));
+    if (data === 'main:manager') return bot.sendMessage(chatId, MANAGER_CONTACT);
+
+    const s = session.get(chatId);
+    if (!s) return;
+
+    if (data.startsWith('menu_cat:')) return showMenuItems(bot, chatId, s, data.slice('menu_cat:'.length));
+    if (data.startsWith('menu_item:')) return addMenuItem(bot, chatId, s, Number(data.slice('menu_item:'.length)));
+    if (data === 'menu_done') return goToPayment(bot, chatId, s);
+    if (data.startsWith('guests:')) return handleGuests(bot, chatId, s, data.slice('guests:'.length));
+    if (data.startsWith('payment:')) return handlePayment(bot, chatId, s, data.slice('payment:'.length));
+    if (data === 'consent_accept') return finalizeBooking(bot, chatId, s, query.from.id);
+  });
+
+  bot.on('message', (msg) => {
+    if (!msg.text || msg.text.startsWith('/')) return;
+    const s = session.get(msg.chat.id);
+    if (!s) return;
+    handleTextStep(bot, msg, s);
+  });
+
+  console.log('[bot] started (polling)');
+  return bot;
+}
+
+function beginBooking(bot, chatId) {
+  session.start(chatId, { step: 'full_name', data: { extras: [] } });
+  bot.sendMessage(chatId, 'Оформим бронь. Как вас зовут (имя и фамилия)?');
+}
+
+function showMenuBrowse(bot, chatId) {
+  const categories = getMenuCategories(PROPERTY_ID);
+  if (categories.length === 0) {
+    return bot.sendMessage(chatId, 'Меню пока не заполнено.');
+  }
+  bot.sendMessage(chatId, 'Выберите категорию:', {
+    reply_markup: {
+      inline_keyboard: categories.map((c) => [
+        { text: CATEGORY_LABELS[c] || c, callback_data: 'menu_cat:' + c },
+      ]),
+    },
+  });
+}
+
+function handleTextStep(bot, msg, s) {
+  const chatId = msg.chat.id;
+  const text = msg.text.trim();
+
+  switch (s.step) {
+    case 'full_name':
+      s.data.fullName = text;
+      s.step = 'phone';
+      bot.sendMessage(chatId, 'Ваш телефон?', {
+        reply_markup: {
+          keyboard: [[{ text: 'Отправить номер телефона', request_contact: true }]],
+          one_time_keyboard: true,
+          resize_keyboard: true,
+        },
+      });
+      break;
+
+    case 'phone':
+      s.data.phone = msg.contact ? msg.contact.phone_number : text;
+      s.step = 'email';
+      bot.sendMessage(chatId, 'Ваш email?', { reply_markup: { remove_keyboard: true } });
+      break;
+
+    case 'email':
+      s.data.email = text;
+      s.step = 'check_in';
+      bot.sendMessage(chatId, 'Дата заезда? (в формате ГГГГ-ММ-ДД, например 2026-08-01)');
+      break;
+
+    case 'check_in':
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+        return bot.sendMessage(chatId, 'Формат даты: ГГГГ-ММ-ДД. Попробуйте ещё раз.');
+      }
+      s.data.checkIn = text;
+      s.step = 'check_out';
+      bot.sendMessage(chatId, 'Дата выезда? (ГГГГ-ММ-ДД)');
+      break;
+
+    case 'check_out':
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(text) || text <= s.data.checkIn) {
+        return bot.sendMessage(chatId, 'Дата выезда должна быть позже даты заезда, формат ГГГГ-ММ-ДД.');
+      }
+      s.data.checkOut = text;
+      s.step = 'guests';
+      bot.sendMessage(chatId, 'Сколько гостей?', {
+        reply_markup: {
+          inline_keyboard: [[
+            { text: '1', callback_data: 'guests:1' },
+            { text: '2', callback_data: 'guests:2' },
+            { text: '3', callback_data: 'guests:3' },
+          ]],
+        },
+      });
+      break;
+
+    default:
+      break;
+  }
+}
+
+function handleGuests(bot, chatId, s, guests) {
+  s.data.guests = Number(guests);
+  s.step = 'menu';
+  bot.sendMessage(chatId, 'Хотите добавить доп. услуги (завтрак/обед/трансфер)?', {
+    reply_markup: {
+      inline_keyboard: [
+        ...getMenuCategories(PROPERTY_ID).map((c) => [
+          { text: CATEGORY_LABELS[c] || c, callback_data: 'menu_cat:' + c },
+        ]),
+        [{ text: 'Пропустить →', callback_data: 'menu_done' }],
+      ],
+    },
+  });
+}
+
+function showMenuItems(bot, chatId, s, category) {
+  const items = getMenuItems(PROPERTY_ID, category);
+  if (items.length === 0) {
+    return bot.sendMessage(chatId, 'В этой категории пока нет позиций.');
+  }
+  bot.sendMessage(chatId, `${CATEGORY_LABELS[category] || category}:`, {
+    reply_markup: {
+      inline_keyboard: [
+        ...items.map((item) => [
+          { text: `${item.name} — ${item.price}₽`, callback_data: 'menu_item:' + item.id },
+        ]),
+        [{ text: 'Готово →', callback_data: 'menu_done' }],
+      ],
+    },
+  });
+}
+
+function addMenuItem(bot, chatId, s, menuItemId) {
+  s.data.extras.push({ menuItemId, quantity: 1 });
+  bot.sendMessage(chatId, 'Добавлено. Можно выбрать ещё или нажать «Готово».');
+}
+
+function goToPayment(bot, chatId, s) {
+  s.step = 'payment';
+  bot.sendMessage(chatId, 'Способ оплаты?', {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: 'Банковская карта', callback_data: 'payment:card' }],
+        [{ text: 'Перевод по реквизитам', callback_data: 'payment:transfer' }],
+        [{ text: 'Оплата по ссылке (онлайн)', callback_data: 'payment:link' }],
+      ],
+    },
+  });
+}
+
+function handlePayment(bot, chatId, s, method) {
+  s.data.payment = method;
+  s.step = 'consent';
+  bot.sendMessage(chatId, CONSENT_TEXT, {
+    reply_markup: { inline_keyboard: [[{ text: '✅ Согласен', callback_data: 'consent_accept' }]] },
+  });
+}
+
+async function finalizeBooking(bot, chatId, s, telegramUserId) {
+  try {
+    const result = await createBooking({
+      propertyId: PROPERTY_ID,
+      fullName: s.data.fullName,
+      phone: s.data.phone,
+      email: s.data.email,
+      checkIn: s.data.checkIn,
+      checkOut: s.data.checkOut,
+      guests: s.data.guests,
+      payment: s.data.payment,
+      consent: true,
+    });
+
+    if (s.data.extras.length > 0) {
+      addBookingItems(result.bookingId, s.data.extras);
+    }
+
+    const insertConsent = db.prepare(
+      'INSERT INTO consents (booking_id, telegram_user_id, document_type, document_version) VALUES (?, ?, ?, ?)'
+    );
+    for (const docType of CONSENT_DOCS) {
+      insertConsent.run(result.bookingId, String(telegramUserId), docType, 'v1');
+    }
+
+    session.clear(chatId);
+
+    if (result.confirmationUrl) {
+      bot.sendMessage(chatId, `Бронь №${result.bookingId} создана. Для подтверждения оплатите по ссылке:`, {
+        reply_markup: { inline_keyboard: [[{ text: 'Оплатить', url: result.confirmationUrl }]] },
+      });
+    } else {
+      bot.sendMessage(
+        chatId,
+        `Заявка №${result.bookingId} принята! Менеджер свяжется с вами для подтверждения.`
+      );
+    }
+  } catch (err) {
+    if (err instanceof BookingError && err.code === 'conflict') {
+      bot.sendMessage(chatId, 'Эти даты уже заняты. Начните заново командой /book и выберите другие даты.');
+    } else {
+      console.error('[bot] booking finalize failed', err);
+      bot.sendMessage(chatId, 'Не удалось оформить бронь. Попробуйте позже или свяжитесь с менеджером /manager.');
+    }
+    session.clear(chatId);
+  }
+}
+
+module.exports = { startBot };

@@ -6,6 +6,7 @@ const propertiesRouter = require('./routes/properties');
 const bookingsRouter = require('./routes/bookings');
 const webhookRouter = require('./routes/webhook');
 const adminRouter = require('./routes/admin');
+const { startBot } = require('./bot');
 
 const app = express();
 app.use(cors({ origin: process.env.ALLOWED_ORIGIN || '*' }));
@@ -20,3 +21,5 @@ app.get('/api/health', (req, res) => res.json({ ok: true }));
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => console.log(`apart-server listening on :${port}`));
+
+startBot();

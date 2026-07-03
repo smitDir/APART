@@ -33,4 +33,35 @@ router.post('/bookings/:id/confirm', basicAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+// Content queue: draft a post (caption + prompt for AI generation), then
+// attach the generated media file once it exists (generation itself happens
+// via the RunComfy CLI/skill, outside this server — see server/README.md).
+router.get('/posts', basicAuth, (req, res) => {
+  const rows = db.prepare('SELECT * FROM scheduled_posts ORDER BY created_at DESC').all();
+  res.json(rows);
+});
+
+router.post('/posts', basicAuth, (req, res) => {
+  const { channel, caption, mediaPrompt, scheduledAt } = req.body || {};
+  if (!channel || !['telegram', 'youtube'].includes(channel)) {
+    return res.status(400).json({ error: 'channel must be telegram or youtube' });
+  }
+  const info = db
+    .prepare(
+      'INSERT INTO scheduled_posts (channel, caption, media_prompt, scheduled_at) VALUES (?, ?, ?, ?)'
+    )
+    .run(channel, caption || null, mediaPrompt || null, scheduledAt || null);
+  res.json({ id: info.lastInsertRowid });
+});
+
+router.post('/posts/:id/media', basicAuth, (req, res) => {
+  const id = Number(req.params.id);
+  const { mediaPath } = req.body || {};
+  if (!mediaPath) return res.status(400).json({ error: 'mediaPath required' });
+  const post = db.prepare('SELECT * FROM scheduled_posts WHERE id = ?').get(id);
+  if (!post) return res.status(404).json({ error: 'not found' });
+  db.prepare("UPDATE scheduled_posts SET media_path = ?, status = 'generated' WHERE id = ?").run(mediaPath, id);
+  res.json({ ok: true });
+});
+
 module.exports = router;
