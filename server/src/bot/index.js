@@ -9,6 +9,9 @@ const {
   MANAGER_CONTACT,
   CATEGORY_LABELS,
 } = require('./content');
+const gemini = require('../ai/gemini');
+const { buildSystemPrompt } = require('../ai/knowledgeBase');
+const conversation = require('../ai/conversation');
 
 const PROPERTY_ID = 1;
 const CONSENT_TEXT =
@@ -81,12 +84,36 @@ function startBot() {
   bot.on('message', (msg) => {
     if (!msg.text || msg.text.startsWith('/')) return;
     const s = session.get(msg.chat.id);
-    if (!s) return;
-    handleTextStep(bot, msg, s);
+    if (s) return handleTextStep(bot, msg, s);
+    handleFreeformMessage(bot, msg);
   });
 
   console.log('[bot] started (polling)');
   return bot;
+}
+
+async function handleFreeformMessage(bot, msg) {
+  const chatId = msg.chat.id;
+  if (!gemini.isConfigured()) {
+    return bot.sendMessage(
+      chatId,
+      'Я пока не умею отвечать на свободные вопросы — воспользуйтесь командами /book, /menu, /manual, /emergency, /events или /manager.'
+    );
+  }
+
+  conversation.appendMessage(chatId, 'user', msg.text);
+  const history = conversation.getHistory(chatId);
+
+  try {
+    const reply = await gemini.generateReply(buildSystemPrompt(PROPERTY_ID), history);
+    conversation.appendMessage(chatId, 'model', reply);
+    bot.sendMessage(chatId, reply, {
+      reply_markup: { inline_keyboard: [[{ text: '👤 Написать менеджеру', callback_data: 'main:manager' }]] },
+    });
+  } catch (err) {
+    console.error('[bot] AI reply failed', err);
+    bot.sendMessage(chatId, 'Не получилось ответить. Попробуйте /manager, чтобы связаться с менеджером напрямую.');
+  }
 }
 
 function beginBooking(bot, chatId) {

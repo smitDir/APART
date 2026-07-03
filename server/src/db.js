@@ -70,6 +70,16 @@ db.exec(`
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  -- Диалоговая память AI-бота (последние сообщения по каждому чату для контекста LLM).
+  CREATE TABLE IF NOT EXISTS chat_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id TEXT NOT NULL,
+    role TEXT NOT NULL, -- 'user' | 'model'
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_chat_messages_chat_id ON chat_messages(chat_id);
+
   CREATE TABLE IF NOT EXISTS scheduled_posts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     channel TEXT NOT NULL, -- 'telegram' | 'youtube'
