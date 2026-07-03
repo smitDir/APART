@@ -129,6 +129,24 @@
   <hr style="margin-top:40px;border-color:#c9a96e"/>
 
   <h2>&#128221; Бронирование и заказ</h2>
+
+  <div id="availabilityCalendar" style="background:#fff;padding:20px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.1);margin:20px 0;">
+    <h3 style="margin-top:0;">Календарь занятости</h3>
+    <div id="calendarNav" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <button type="button" id="calPrev" style="padding:6px 12px;border:1px solid #ccc;border-radius:5px;background:#fff;cursor:pointer;">&larr;</button>
+      <strong id="calLabel"></strong>
+      <button type="button" id="calNext" style="padding:6px 12px;border:1px solid #ccc;border-radius:5px;background:#fff;cursor:pointer;">&rarr;</button>
+    </div>
+    <div id="calGrid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center;font-size:14px;"></div>
+    <p style="margin:10px 0 0;font-size:13px;color:#888;">
+      <span style="display:inline-block;width:12px;height:12px;background:#e6a4a4;border-radius:3px;vertical-align:middle;"></span> занято
+      &nbsp;
+      <span style="display:inline-block;width:12px;height:12px;background:#c9e6b0;border-radius:3px;vertical-align:middle;"></span> свободно
+    </p>
+  </div>
+
+  <div id="bookingMessage" style="display:none;padding:15px;border-radius:8px;margin:20px 0;"></div>
+
   <form id="bookingForm" style="background:#fff;padding:25px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.1);margin:20px 0;">
 
     <h3 style="margin-top:0;">Персональные данные</h3>
@@ -223,5 +241,140 @@
     <p style="margin-top:15px;color:#777;font-size:14px;">Время работы: ежедневно, 09:00–22:00 (Москва)</p>
   </div>
 
+  <script>
+    // Адрес backend API. После разворачивания на VPS замените на реальный (например https://api.radegust.ru)
+    var API_BASE_URL = window.APART_API_BASE_URL || 'https://api.radegust.ru';
+    var PROPERTY_ID = 1;
+
+    (function calendarWidget() {
+      var grid = document.getElementById('calGrid');
+      var label = document.getElementById('calLabel');
+      var prevBtn = document.getElementById('calPrev');
+      var nextBtn = document.getElementById('calNext');
+      var monthNames = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+      var view = new Date();
+      view.setDate(1);
+      var bookedRanges = [];
+
+      function toISODate(d) {
+        return d.toISOString().slice(0, 10);
+      }
+
+      function isBooked(dateStr) {
+        return bookedRanges.some(function (r) {
+          return dateStr >= r.checkIn && dateStr < r.checkOut;
+        });
+      }
+
+      function render() {
+        label.textContent = monthNames[view.getMonth()] + ' ' + view.getFullYear();
+        grid.innerHTML = '';
+        var firstDay = new Date(view.getFullYear(), view.getMonth(), 1);
+        var startOffset = (firstDay.getDay() + 6) % 7; // Monday-first
+        var daysInMonth = new Date(view.getFullYear(), view.getMonth() + 1, 0).getDate();
+
+        for (var i = 0; i < startOffset; i++) {
+          grid.appendChild(document.createElement('div'));
+        }
+        for (var d = 1; d <= daysInMonth; d++) {
+          var cell = document.createElement('div');
+          var dateObj = new Date(view.getFullYear(), view.getMonth(), d);
+          var iso = toISODate(dateObj);
+          cell.textContent = d;
+          cell.style.padding = '6px 0';
+          cell.style.borderRadius = '4px';
+          cell.style.background = isBooked(iso) ? '#e6a4a4' : '#c9e6b0';
+          grid.appendChild(cell);
+        }
+      }
+
+      function loadAvailability() {
+        var from = toISODate(new Date(view.getFullYear(), view.getMonth(), 1));
+        var to = toISODate(new Date(view.getFullYear(), view.getMonth() + 1, 0));
+        fetch(API_BASE_URL + '/api/properties/' + PROPERTY_ID + '/availability?from=' + from + '&to=' + to)
+          .then(function (r) { return r.ok ? r.json() : []; })
+          .then(function (data) { bookedRanges = data; render(); })
+          .catch(function () { render(); });
+      }
+
+      prevBtn.addEventListener('click', function () {
+        view.setMonth(view.getMonth() - 1);
+        loadAvailability();
+      });
+      nextBtn.addEventListener('click', function () {
+        view.setMonth(view.getMonth() + 1);
+        loadAvailability();
+      });
+
+      loadAvailability();
+    })();
+
+    (function bookingForm() {
+      var form = document.getElementById('bookingForm');
+      var messageBox = document.getElementById('bookingMessage');
+
+      function showMessage(text, ok) {
+        messageBox.style.display = 'block';
+        messageBox.style.background = ok ? '#e8f5e0' : '#fbe4e4';
+        messageBox.style.color = ok ? '#2e5c1a' : '#8a2f2f';
+        messageBox.textContent = text;
+        messageBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var formData = new FormData(form);
+        var payload = {
+          propertyId: PROPERTY_ID,
+          fullName: formData.get('fullName'),
+          phone: formData.get('phone'),
+          email: formData.get('email'),
+          checkIn: formData.get('checkIn'),
+          checkOut: formData.get('checkOut'),
+          guests: formData.get('guests'),
+          children: formData.get('children') || 0,
+          purpose: formData.get('purpose'),
+          payment: formData.get('payment'),
+          services: formData.getAll('services'),
+          comments: formData.get('comments'),
+          consent: formData.get('consent') === 'on',
+        };
+
+        var submitBtn = form.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Отправляем...';
+
+        fetch(API_BASE_URL + '/api/bookings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+          .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+          .then(function (result) {
+            if (!result.ok) {
+              if (result.data.error === 'dates not available') {
+                showMessage('Эти даты уже заняты. Пожалуйста, выберите другие даты.', false);
+              } else {
+                showMessage('Не удалось отправить заявку. Попробуйте ещё раз или свяжитесь с нами по телефону/Telegram.', false);
+              }
+              return;
+            }
+            if (result.data.confirmationUrl) {
+              window.location.href = result.data.confirmationUrl;
+              return;
+            }
+            form.reset();
+            showMessage('Заявка №' + result.data.bookingId + ' принята! Менеджер свяжется с вами для подтверждения.', true);
+          })
+          .catch(function () {
+            showMessage('Не удалось отправить заявку — проверьте подключение к интернету или свяжитесь с нами напрямую.', false);
+          })
+          .finally(function () {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Отправить заявку на бронирование';
+          });
+      });
+    })();
+  </script>
 </body>
 </html>
