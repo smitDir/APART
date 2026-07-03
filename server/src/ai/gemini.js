@@ -1,8 +1,11 @@
 const fetch = require('node-fetch');
 
 // Free-tier model at Google AI Studio (https://ai.google.dev) — override via
-// GEMINI_MODEL if the free-tier model name changes on Google's side.
-const DEFAULT_MODEL = 'gemini-2.0-flash';
+// GEMINI_MODEL if the free-tier model name/quota changes on Google's side.
+// Verified working with real free-tier quota as of this writing:
+// gemini-2.5-flash, gemini-2.5-flash-lite, gemini-flash-latest.
+// gemini-2.0-flash returned 0 quota on this project — do not use it.
+const DEFAULT_MODEL = 'gemini-2.5-flash';
 
 function isConfigured() {
   return Boolean(process.env.GEMINI_API_KEY);
