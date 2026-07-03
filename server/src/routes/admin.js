@@ -57,11 +57,15 @@ router.post('/posts', basicAuth, (req, res) => {
 
 router.post('/posts/:id/media', basicAuth, (req, res) => {
   const id = Number(req.params.id);
-  const { mediaPath } = req.body || {};
-  if (!mediaPath) return res.status(400).json({ error: 'mediaPath required' });
+  const { mediaPath, mediaPaths } = req.body || {};
+  if (!mediaPath && !mediaPaths) {
+    return res.status(400).json({ error: 'mediaPath (string) or mediaPaths (array, for carousel) required' });
+  }
   const post = db.prepare('SELECT * FROM scheduled_posts WHERE id = ?').get(id);
   if (!post) return res.status(404).json({ error: 'not found' });
-  db.prepare("UPDATE scheduled_posts SET media_path = ?, status = 'generated' WHERE id = ?").run(mediaPath, id);
+  // Карусель хранит несколько путей как JSON-массив в том же поле media_path.
+  const storedPath = mediaPaths ? JSON.stringify(mediaPaths) : mediaPath;
+  db.prepare("UPDATE scheduled_posts SET media_path = ?, status = 'generated' WHERE id = ?").run(storedPath, id);
   res.json({ ok: true });
 });
 
