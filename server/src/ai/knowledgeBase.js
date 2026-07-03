@@ -24,12 +24,27 @@ function buildSystemPrompt(propertyId = 1) {
   const tiers = db
     .prepare('SELECT * FROM pricing_tiers WHERE property_id = ? ORDER BY min_nights')
     .all(propertyId);
+  const alternatives = db
+    .prepare('SELECT * FROM properties WHERE id != ? AND active = 1')
+    .all(propertyId);
 
   const contentByType = Object.fromEntries(content.map((c) => [c.content_type, c.body]));
   const menuText = menu.map((m) => `- [${m.category}] ${m.name} — ${m.price}₽ (${m.description || ''})`).join('\n');
   const depositText = property.security_deposit
     ? `Залог: ${property.security_deposit}₽ (возврат в течение 1–7 дней после выезда).`
     : 'Залог: не требуется.';
+
+  const alternativesText = alternatives
+    .map((alt) => {
+      const altManual = db
+        .prepare("SELECT body FROM property_content WHERE property_id = ? AND content_type = 'manual'")
+        .get(alt.id);
+      const priceInfo = alt.base_price
+        ? `от ${alt.base_price}₽/сутки`
+        : 'цена обсуждается лично (напиши гостю попросить назвать бюджет)';
+      return `- ${alt.name}: ${alt.description || ''} ${priceInfo}. ${altManual ? altManual.body : ''}`;
+    })
+    .join('\n');
 
   return `${contentByType.persona || 'Ты — AI-менеджер по бронированию апартаментов "Tvoy Apart 24/7".'}
 
@@ -57,7 +72,14 @@ ${contentByType.events || 'не заполнено'}
 
 Меню доп. услуг (завтрак/обед/трансфер):
 ${menuText || 'не заполнено'}
-
+${
+  alternativesText
+    ? `\nБюджетная альтернатива (предлагай, только если гость явно говорит, что дорого, или прямо просит подешевле — НЕ предлагай сама по себе):
+${alternativesText}
+Под каждым твоим ответом уже прикреплена кнопка «Бюджетный вариант» — если предлагаешь альтернативу,
+просто опиши её и скажи нажать эту кнопку, не придумывай отдельную ссылку или команду.\n`
+    : ''
+}
 Для оформления брони направляй гостя на команду /book — это ведёт его через проверенный пошаговый
 сценарий с проверкой занятости дат и оплатой. Не пытайся сам оформить бронь текстом или лично
 называть точную сумму к оплате — используй тарифную сетку выше только для ориентира гостю.

@@ -14,7 +14,8 @@ const gemini = require('../ai/gemini');
 const { buildSystemPrompt } = require('../ai/knowledgeBase');
 const conversation = require('../ai/conversation');
 
-const PROPERTY_ID = 1;
+const PROPERTY_ID = 1; // основной путь — студия
+const BUDGET_PROPERTY_ID = 2; // предлагается, если гость просит подешевле
 const CONSENT_TEXT =
   'Для оформления брони подтвердите согласие на обработку персональных данных, ' +
   'условия договора аренды и правила проживания. Нажимая «Согласен», вы принимаете все три документа.';
@@ -49,7 +50,7 @@ function startBot() {
     });
   });
 
-  bot.onText(/\/book/, (msg) => beginBooking(bot, msg.chat.id));
+  bot.onText(/\/book/, (msg) => beginBooking(bot, msg.chat.id, PROPERTY_ID));
   bot.onText(/\/manual/, (msg) => bot.sendMessage(msg.chat.id, getContent(PROPERTY_ID, 'manual')));
   bot.onText(/\/emergency/, (msg) => bot.sendMessage(msg.chat.id, getContent(PROPERTY_ID, 'emergency')));
   bot.onText(/\/events/, (msg) => bot.sendMessage(msg.chat.id, getContent(PROPERTY_ID, 'events')));
@@ -64,7 +65,8 @@ function startBot() {
     const data = query.data;
     await bot.answerCallbackQuery(query.id);
 
-    if (data === 'main:book') return beginBooking(bot, chatId);
+    if (data === 'main:book') return beginBooking(bot, chatId, PROPERTY_ID);
+    if (data === 'book_room') return beginBooking(bot, chatId, BUDGET_PROPERTY_ID);
     if (data === 'main:menu') return showMenuBrowse(bot, chatId);
     if (data === 'main:manual') return bot.sendMessage(chatId, getContent(PROPERTY_ID, 'manual'));
     if (data === 'main:emergency') return bot.sendMessage(chatId, getContent(PROPERTY_ID, 'emergency'));
@@ -109,7 +111,12 @@ async function handleFreeformMessage(bot, msg) {
     const reply = await gemini.generateReply(buildSystemPrompt(PROPERTY_ID), history);
     conversation.appendMessage(chatId, 'model', reply);
     bot.sendMessage(chatId, reply, {
-      reply_markup: { inline_keyboard: [[{ text: '👤 Написать менеджеру', callback_data: 'main:manager' }]] },
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '🏠 Бюджетный вариант (комната)', callback_data: 'book_room' }],
+          [{ text: '👤 Написать менеджеру', callback_data: 'main:manager' }],
+        ],
+      },
     });
   } catch (err) {
     console.error('[bot] AI reply failed', err);
@@ -117,8 +124,8 @@ async function handleFreeformMessage(bot, msg) {
   }
 }
 
-function beginBooking(bot, chatId) {
-  session.start(chatId, { step: 'full_name', data: { extras: [] } });
+function beginBooking(bot, chatId, propertyId) {
+  session.start(chatId, { step: 'full_name', data: { propertyId, extras: [] } });
   bot.sendMessage(chatId, 'Оформим бронь. Как вас зовут (имя и фамилия)?');
 }
 
@@ -202,7 +209,7 @@ function handleGuests(bot, chatId, s, guests) {
   bot.sendMessage(chatId, 'Хотите добавить доп. услуги (завтрак/обед/трансфер)?', {
     reply_markup: {
       inline_keyboard: [
-        ...getMenuCategories(PROPERTY_ID).map((c) => [
+        ...getMenuCategories(s.data.propertyId).map((c) => [
           { text: CATEGORY_LABELS[c] || c, callback_data: 'menu_cat:' + c },
         ]),
         [{ text: 'Пропустить →', callback_data: 'menu_done' }],
@@ -212,7 +219,7 @@ function handleGuests(bot, chatId, s, guests) {
 }
 
 function showMenuItems(bot, chatId, s, category) {
-  const items = getMenuItems(PROPERTY_ID, category);
+  const items = getMenuItems(s.data.propertyId, category);
   if (items.length === 0) {
     return bot.sendMessage(chatId, 'В этой категории пока нет позиций.');
   }
@@ -236,7 +243,7 @@ function addMenuItem(bot, chatId, s, menuItemId) {
 function goToPayment(bot, chatId, s) {
   s.step = 'payment';
 
-  const pricing = calculatePricing(PROPERTY_ID, s.data.checkIn, s.data.checkOut);
+  const pricing = calculatePricing(s.data.propertyId, s.data.checkIn, s.data.checkOut);
   const priceText = pricing.individual
     ? `${pricing.nights} ноч. — это долгосрочное проживание, точную цену и условия обсудим лично, менеджер свяжется с вами.`
     : `${pricing.nights} ноч. × ${pricing.pricePerNight}₽${pricing.tierLabel ? ` (${pricing.tierLabel})` : ''} = ${pricing.totalAmount}₽\n` +
@@ -266,7 +273,7 @@ function handlePayment(bot, chatId, s, method) {
 async function finalizeBooking(bot, chatId, s, telegramUserId) {
   try {
     const result = await createBooking({
-      propertyId: PROPERTY_ID,
+      propertyId: s.data.propertyId,
       fullName: s.data.fullName,
       phone: s.data.phone,
       email: s.data.email,
