@@ -12,7 +12,20 @@ db.exec(`
     description TEXT,
     capacity INTEGER NOT NULL DEFAULT 3,
     base_price INTEGER,
+    deposit_percent INTEGER NOT NULL DEFAULT 30,
+    security_deposit INTEGER,
     active INTEGER NOT NULL DEFAULT 1
+  );
+
+  -- Тарифная сетка по длительности проживания (скидки за долгий срок).
+  -- Открытый верхний диапазон (max_nights IS NULL) — самый долгий тариф.
+  CREATE TABLE IF NOT EXISTS pricing_tiers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    property_id INTEGER NOT NULL REFERENCES properties(id),
+    min_nights INTEGER NOT NULL,
+    max_nights INTEGER,
+    price_per_night INTEGER NOT NULL,
+    label TEXT
   );
 
   CREATE TABLE IF NOT EXISTS bookings (
@@ -31,6 +44,8 @@ db.exec(`
     comments TEXT,
     status TEXT NOT NULL DEFAULT 'pending',
     yookassa_payment_id TEXT,
+    total_amount INTEGER,
+    advance_amount INTEGER,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -95,16 +110,40 @@ db.exec(`
 
 const propertyCount = db.prepare('SELECT COUNT(*) AS n FROM properties').get().n;
 if (propertyCount === 0) {
-  db.prepare(
-    `INSERT INTO properties (name, address, description, capacity, base_price, active)
-     VALUES (?, ?, ?, ?, ?, 1)`
-  ).run(
+  const insertProperty = db.prepare(
+    `INSERT INTO properties (name, address, description, capacity, base_price, deposit_percent, security_deposit, active)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 1)`
+  );
+  const studioId = insertProperty.run(
     'Студия на Чистых Прудах',
     'Москва, Чистые Пруды',
-    'Апартаменты 11 м² в историческом доме 1892 года',
+    'Апартаменты 11 м² в историческом доме 1892 года. Коммунальные услуги (свет, вода, интернет) включены в стоимость.',
     3,
+    10000,
+    30,
+    5000
+  ).lastInsertRowid;
+
+  // Бюджетный вариант — цена не зафиксирована (см. TZ.md 8.9): по сценарию это
+  // персональный торг с гостем, а не фиксированный тариф, поэтому base_price=NULL.
+  insertProperty.run(
+    'Комната в квартире',
+    'Москва, Чистые Пруды',
+    'Комната в квартире, бюджетный вариант. Доступ к общей кухне и ванной, личный замок, тихие соседи.',
+    2,
+    null,
+    30,
     null
   );
+
+  const insertTier = db.prepare(
+    `INSERT INTO pricing_tiers (property_id, min_nights, max_nights, price_per_night, label) VALUES (?, ?, ?, ?, ?)`
+  );
+  insertTier.run(studioId, 1, 7, 10000, 'Базовый тариф');
+  insertTier.run(studioId, 8, 20, 9000, 'Скидка 10%');
+  insertTier.run(studioId, 21, 29, 8500, 'Скидка 15%');
+  // 30+ ночей — «Индивидуально» (см. TZ.md 8.9): не считаем автоматически,
+  // передаём менеджеру на персональное обсуждение вместо фиксированной цены.
 }
 
 const menuCount = db.prepare('SELECT COUNT(*) AS n FROM menu_items').get().n;
@@ -121,19 +160,56 @@ if (menuCount === 0) {
 const contentCount = db.prepare('SELECT COUNT(*) AS n FROM property_content').get().n;
 if (contentCount === 0) {
   const insertContent = db.prepare(
-    `INSERT INTO property_content (property_id, content_type, body) VALUES (1, ?, ?)`
+    `INSERT INTO property_content (property_id, content_type, body) VALUES (?, ?, ?)`
   );
+
+  const emergencyText = 'Экстренные службы: Единый номер — 112. Полиция — 102. Скорая — 103. МЧС — 101.';
+  const eventsText =
+    'Черновик: подборка мероприятий рядом (музеи/театры/парки) — заполнить актуальным списком.';
+
+  // Персона и политики продавца — общие для обоих объектов одного арендодателя.
+  // См. TZ.md 8.9: пока дублируем на оба property_id, вместо отдельной таблицы
+  // "глобального" контента — при 2 объектах это проще, чем городить абстракцию.
+  const personaText = `Ты представляешь частного арендодателя (физическое лицо), а не агентство.
+Стиль: дружелюбно, по-человечески, «без галстуков», но на «Вы». Никакого канцелярита.
+Принципы: прямое общение без комиссий агентств; честность (реальные фото, о недостатках говоришь заранее);
+гибкость по цене для долгих гостей; забота (маршрут, встреча, совет по району).
+
+Условия оплаты: предоплата 30% от суммы брони фиксирует даты, остаток — при заезде или по ссылке.
+Залог 5000 ₽ (блокируется или наличными), возврат в течение 1–7 дней после выезда.
+Не запрашивай паспортные данные и полные реквизиты карт в чате — это только для договора,
+через защищённый канал или при личной встрече (152-ФЗ).
+
+Политика отмены: бесплатная отмена при отказе более чем за 72 часа до заезда.
+Если позже — удерживается 50% предоплаты в счёт компенсации простоя.
+
+Работа с возражениями:
+— Про отсутствие плиты: честно говори, что её нет, но есть мощная СВЧ и мини-кухня для завтраков,
+  рядом рестораны с доставкой для сложных блюд.
+— Про отсутствие лифта: это 1-й этаж исторического дома — лифт не нужен, удобно с багажом.
+— Про цену: объясняй ценность локации, прямое общение без комиссий, включённые коммуналку и интернет,
+  и что при 8+ ночах уже действует скидка.
+— Если гость ищет максимально бюджетный вариант — не отказывай сразу: предложи "Комнату в квартире"
+  или уточни даты на предмет спецпредложения, прежде чем эскалировать к менеджеру.`;
+
+  for (const propertyId of [1, 2]) {
+    insertContent.run(propertyId, 'emergency', emergencyText);
+    insertContent.run(propertyId, 'events', eventsText);
+    insertContent.run(propertyId, 'persona', personaText);
+  }
+
   insertContent.run(
+    1,
     'manual',
-    'Черновик: инструкции по бытовым приборам (Wi-Fi, стиральная машина, СВЧ, бойлер) — уточнить у владельца и заменить этот текст.'
+    'Wi-Fi 100 Мбит/с включён в цену. Смарт-ТВ. Стиральная машина в квартире. ' +
+      'Варочной плиты нет — есть мощная СВЧ с грилем, чайник, холодильник. ' +
+      'Санузел совмещённый (душ, биде-функция). Бойлер — горячая вода круглосуточно. ' +
+      '1-й этаж исторического дома 1892 года — лифта нет и не требуется.'
   );
   insertContent.run(
-    'emergency',
-    'Экстренные службы: Единый номер — 112. Полиция — 102. Скорая — 103. МЧС — 101.'
-  );
-  insertContent.run(
-    'events',
-    'Черновик: подборка мероприятий рядом (музеи/театры/парки) — заполнить актуальным списком.'
+    2,
+    'manual',
+    'Черновик: инструкции по комнате (Wi-Fi, доступ к общей кухне/ванной, личный замок) — уточнить и заменить.'
   );
 }
 

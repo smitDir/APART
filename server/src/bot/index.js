@@ -2,6 +2,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const db = require('../db');
 const session = require('./session');
 const { createBooking, addBookingItems, BookingError } = require('../services/bookingService');
+const { calculatePricing } = require('../services/pricing');
 const {
   getContent,
   getMenuItems,
@@ -234,6 +235,15 @@ function addMenuItem(bot, chatId, s, menuItemId) {
 
 function goToPayment(bot, chatId, s) {
   s.step = 'payment';
+
+  const pricing = calculatePricing(PROPERTY_ID, s.data.checkIn, s.data.checkOut);
+  const priceText = pricing.individual
+    ? `${pricing.nights} ноч. — это долгосрочное проживание, точную цену и условия обсудим лично, менеджер свяжется с вами.`
+    : `${pricing.nights} ноч. × ${pricing.pricePerNight}₽${pricing.tierLabel ? ` (${pricing.tierLabel})` : ''} = ${pricing.totalAmount}₽\n` +
+      `Для подтверждения брони — аванс ${pricing.advanceAmount}₽ (${pricing.depositPercent}%), остальное при заезде.` +
+      (pricing.securityDeposit ? `\nЗалог: ${pricing.securityDeposit}₽ (возврат после выезда).` : '');
+  bot.sendMessage(chatId, priceText);
+
   bot.sendMessage(chatId, 'Способ оплаты?', {
     reply_markup: {
       inline_keyboard: [

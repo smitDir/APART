@@ -1,6 +1,7 @@
 const db = require('../db');
 const yookassa = require('../yookassa');
 const { notifyTelegram } = require('../telegram');
+const { calculatePricing } = require('./pricing');
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -55,10 +56,12 @@ async function createBooking(input) {
     throw new BookingError('conflict', 'dates not available');
   }
 
+  const pricing = calculatePricing(propertyId, checkIn, checkOut);
+
   const insert = db.prepare(
     `INSERT INTO bookings
-     (property_id, full_name, phone, email, check_in, check_out, guests, children, purpose, payment_method, services, comments, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`
+     (property_id, full_name, phone, email, check_in, check_out, guests, children, purpose, payment_method, services, comments, status, total_amount, advance_amount)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
   );
   const info = insert.run(
     propertyId,
@@ -72,22 +75,27 @@ async function createBooking(input) {
     purpose || null,
     payment,
     JSON.stringify(services),
-    comments || null
+    comments || null,
+    pricing.individual ? null : pricing.totalAmount,
+    pricing.individual ? null : pricing.advanceAmount
   );
   const bookingId = info.lastInsertRowid;
 
+  const priceNote = pricing.individual
+    ? `${pricing.nights} ноч. — индивидуальные условия, требуют обсуждения с менеджером`
+    : `${pricing.nights} ноч. × ${pricing.pricePerNight}₽ = ${pricing.totalAmount}₽, аванс ${pricing.advanceAmount}₽ (${pricing.depositPercent}%)`;
   await notifyTelegram(
-    `🆕 Новая заявка #${bookingId}\n${fullName}, ${phone}\n${checkIn} → ${checkOut}, гостей: ${guests}\nОплата: ${payment}`
+    `🆕 Новая заявка #${bookingId}\n${fullName}, ${phone}\n${checkIn} → ${checkOut}, гостей: ${guests}\n${priceNote}\nОплата: ${payment}`
   );
 
   let confirmationUrl = null;
-  if (payment === 'link' && yookassa.isConfigured()) {
+  // 30+ ночей — не выставляем автоматический счёт, это персональные условия
+  // (см. TZ.md 8.9), менеджер связывается с гостем напрямую.
+  if (payment === 'link' && !pricing.individual && yookassa.isConfigured()) {
     try {
-      const nights = Math.round((new Date(checkOut) - new Date(checkIn)) / (1000 * 60 * 60 * 24));
-      const amount = (property.base_price || 0) * nights;
       const paymentObj = await yookassa.createPayment({
-        amount: amount > 0 ? amount : 1,
-        description: `Бронирование #${bookingId}, ${property.name}`,
+        amount: pricing.advanceAmount,
+        description: `Аванс 30% за бронирование #${bookingId}, ${property.name}`,
         bookingId,
         returnUrl: process.env.BOOKING_RETURN_URL || 'https://radegust.ru/lending/apart/',
       });
@@ -98,7 +106,7 @@ async function createBooking(input) {
     }
   }
 
-  return { bookingId, status: 'pending', confirmationUrl };
+  return { bookingId, status: 'pending', confirmationUrl, pricing };
 }
 
 function addBookingItems(bookingId, items) {
