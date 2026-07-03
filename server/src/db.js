@@ -95,13 +95,25 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_chat_messages_chat_id ON chat_messages(chat_id);
 
+  -- Тема месяца для контент-плана (задаётся пользователем).
+  CREATE TABLE IF NOT EXISTS content_themes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    month TEXT NOT NULL, -- '2026-07'
+    theme TEXT NOT NULL,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   CREATE TABLE IF NOT EXISTS scheduled_posts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     channel TEXT NOT NULL, -- 'telegram' | 'youtube'
+    content_type TEXT NOT NULL DEFAULT 'photo', -- 'text' | 'photo' | 'video'
+    theme TEXT,
+    week_of TEXT, -- дата понедельника недели, для группировки в еженедельное предложение
     caption TEXT,
     media_prompt TEXT,
     media_path TEXT,
-    status TEXT NOT NULL DEFAULT 'draft', -- 'draft' | 'generated' | 'posted' | 'failed'
+    status TEXT NOT NULL DEFAULT 'draft', -- 'draft' | 'approved' | 'generated' | 'posted' | 'failed'
     scheduled_at TEXT,
     posted_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))

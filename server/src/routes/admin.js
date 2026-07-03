@@ -1,5 +1,6 @@
 const express = require('express');
 const db = require('../db');
+const weeklyPlan = require('../content/weeklyPlan');
 
 const router = express.Router();
 
@@ -61,6 +62,33 @@ router.post('/posts/:id/media', basicAuth, (req, res) => {
   const post = db.prepare('SELECT * FROM scheduled_posts WHERE id = ?').get(id);
   if (!post) return res.status(404).json({ error: 'not found' });
   db.prepare("UPDATE scheduled_posts SET media_path = ?, status = 'generated' WHERE id = ?").run(mediaPath, id);
+  res.json({ ok: true });
+});
+
+// Еженедельное предложение постов: создаётся одним пакетом (см. TZ.md 8.10),
+// утверждается тоже целиком, а не по одному посту.
+router.post('/posts/week', basicAuth, (req, res) => {
+  const { weekOf, theme, posts } = req.body || {};
+  if (!weekOf || !Array.isArray(posts) || posts.length === 0) {
+    return res.status(400).json({ error: 'weekOf and non-empty posts[] required' });
+  }
+  weeklyPlan.createWeeklyProposal(weekOf, theme, posts);
+  res.json({ ok: true, count: posts.length });
+});
+
+router.get('/posts/week/:weekOf', basicAuth, (req, res) => {
+  res.json(weeklyPlan.getWeeklyProposal(req.params.weekOf));
+});
+
+router.post('/posts/week/:weekOf/approve', basicAuth, (req, res) => {
+  const count = weeklyPlan.approveWeeklyProposal(req.params.weekOf);
+  res.json({ ok: true, approved: count });
+});
+
+router.post('/themes', basicAuth, (req, res) => {
+  const { month, theme, notes } = req.body || {};
+  if (!month || !theme) return res.status(400).json({ error: 'month and theme required' });
+  weeklyPlan.setMonthTheme(month, theme, notes);
   res.json({ ok: true });
 });
 
