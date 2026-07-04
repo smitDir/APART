@@ -20,12 +20,12 @@ REPO_URL='https://github.com/<org>/APART.git' bash deploy_apart.sh
 nano /opt/apart-server/server/.env
 pm2 restart apart-server --update-env
 
-# 4. nginx + HTTPS
+# 4. nginx + HTTPS (apart247.ru — отдельный домен под API, не поддомен radegust.ru)
 cp nginx-apart.conf /etc/nginx/sites-available/apart
-# отредактировать api.YOURDOMAIN.ru на реальный поддомен
 ln -s /etc/nginx/sites-available/apart /etc/nginx/sites-enabled/
 nginx -t && systemctl reload nginx
-certbot --nginx -d api.YOURDOMAIN.ru
+certbot --nginx -d apart247.ru
+# До этого — в DNS-панели регистратора apart247.ru должна быть A-запись на IP сервера
 
 # 5. Контент-крон (публикация постов по расписанию)
 crontab -e

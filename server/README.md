@@ -63,9 +63,9 @@ npm start
 1. Node.js 20+, MySQL/MariaDB сервер (общий на VPS, отдельная база `DB_NAME` под этот проект), `npm install --production`.
 2. Заполнить `.env` реальными ключами ЮKassa, Telegram и параметрами `DB_*`.
 3. Запускать как systemd-сервис или через `pm2 start src/index.js --name apart-server`.
-4. nginx: проксировать поддомен (например `api.radegust.ru`) на `localhost:3000`, HTTPS через certbot.
+4. nginx: проксировать домен `apart247.ru` (отдельный от лендинга, только под API) на `localhost:3000`, HTTPS через certbot.
 5. В `index.html` заменить `window.APART_API_BASE_URL` на реальный адрес API (или задать глобальную переменную перед подключением скрипта).
-6. В ЮKassa указать webhook URL: `https://api.radegust.ru/api/webhooks/yookassa` (событие `payment.succeeded`).
+6. В ЮKassa указать webhook URL: `https://apart247.ru/api/webhooks/yookassa` (событие `payment.succeeded`).
 
 ## Контент-конвейер (посты в Telegram-канал)
 
@@ -114,5 +114,5 @@ YouTube-канал и настроен OAuth-доступ к YouTube Data API v3
 Оплата переводом по реквизитам подтверждается вручную менеджером:
 
 ```bash
-curl -X POST -u admin:PASSWORD https://api.radegust.ru/api/admin/bookings/<id>/confirm
+curl -X POST -u admin:PASSWORD https://apart247.ru/api/admin/bookings/<id>/confirm
 ```
