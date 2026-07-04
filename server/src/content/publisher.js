@@ -1,6 +1,7 @@
 const fs = require('fs');
 const TelegramBot = require('node-telegram-bot-api');
 const db = require('../db');
+const youtube = require('./youtube');
 
 function isVideo(mediaPath) {
   return /\.(mp4|mov|mkv)$/i.test(mediaPath);
@@ -22,11 +23,11 @@ async function publishCarousel(bot, channelId, post) {
   await bot.sendMediaGroup(channelId, media);
 }
 
-async function publishDuePosts() {
+async function publishTelegramDue() {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const channelId = process.env.TELEGRAM_CHANNEL_ID;
   if (!token || !channelId) {
-    console.log('[content] TELEGRAM_BOT_TOKEN/TELEGRAM_CHANNEL_ID not set, skipping publish run');
+    console.log('[content] TELEGRAM_BOT_TOKEN/TELEGRAM_CHANNEL_ID not set, skipping Telegram publish run');
     return;
   }
 
@@ -60,6 +61,39 @@ async function publishDuePosts() {
       await db.run("UPDATE scheduled_posts SET status = 'failed' WHERE id = ?", [post.id]);
     }
   }
+}
+
+async function publishYoutubeDue() {
+  if (!youtube.isConfigured()) {
+    console.log('[content] YOUTUBE_* env not set, skipping YouTube publish run');
+    return;
+  }
+
+  const due = await db.all(
+    `SELECT * FROM scheduled_posts
+     WHERE channel = 'youtube' AND status = 'generated'
+     AND (scheduled_at IS NULL OR scheduled_at <= NOW())`
+  );
+
+  for (const post of due) {
+    try {
+      if (!post.media_path || !fs.existsSync(post.media_path)) {
+        console.error(`[content] post #${post.id} has no valid media_path, skipping`);
+        continue;
+      }
+      const result = await youtube.uploadVideo(post);
+      await db.run("UPDATE scheduled_posts SET status = 'posted', posted_at = NOW() WHERE id = ?", [post.id]);
+      console.log(`[content] posted #${post.id} to YouTube: https://youtu.be/${result.id}`);
+    } catch (err) {
+      console.error(`[content] failed to post #${post.id} to YouTube`, err);
+      await db.run("UPDATE scheduled_posts SET status = 'failed' WHERE id = ?", [post.id]);
+    }
+  }
+}
+
+async function publishDuePosts() {
+  await publishTelegramDue();
+  await publishYoutubeDue();
 }
 
 module.exports = { publishDuePosts };

@@ -43,13 +43,13 @@ router.get('/posts', basicAuth, async (req, res) => {
 });
 
 router.post('/posts', basicAuth, async (req, res) => {
-  const { channel, caption, mediaPrompt, scheduledAt } = req.body || {};
+  const { channel, contentType, caption, mediaPrompt, scheduledAt } = req.body || {};
   if (!channel || !['telegram', 'youtube'].includes(channel)) {
     return res.status(400).json({ error: 'channel must be telegram or youtube' });
   }
   const info = await db.run(
-    'INSERT INTO scheduled_posts (channel, caption, media_prompt, scheduled_at) VALUES (?, ?, ?, ?)',
-    [channel, caption || null, mediaPrompt || null, scheduledAt || null]
+    'INSERT INTO scheduled_posts (channel, content_type, caption, media_prompt, scheduled_at) VALUES (?, ?, ?, ?, ?)',
+    [channel, contentType || 'photo', caption || null, mediaPrompt || null, scheduledAt || null]
   );
   res.json({ id: info.lastInsertRowid });
 });
