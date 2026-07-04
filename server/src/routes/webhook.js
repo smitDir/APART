@@ -20,10 +20,10 @@ router.post('/yookassa', async (req, res) => {
     const payment = await yookassa.getPayment(paymentId);
     if (payment.status !== 'succeeded') return;
 
-    const booking = db.prepare('SELECT * FROM bookings WHERE yookassa_payment_id = ?').get(paymentId);
+    const booking = await db.get('SELECT * FROM bookings WHERE yookassa_payment_id = ?', [paymentId]);
     if (!booking || booking.status === 'confirmed') return;
 
-    db.prepare("UPDATE bookings SET status = 'confirmed' WHERE id = ?").run(booking.id);
+    await db.run("UPDATE bookings SET status = 'confirmed' WHERE id = ?", [booking.id]);
     await notifyTelegram(
       `✅ Оплата подтверждена, бронь #${booking.id}\n${booking.full_name}, ${booking.check_in} → ${booking.check_out}`
     );

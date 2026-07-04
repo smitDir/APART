@@ -51,9 +51,11 @@ function startBot() {
   });
 
   bot.onText(/\/book/, (msg) => beginBooking(bot, msg.chat.id, PROPERTY_ID));
-  bot.onText(/\/manual/, (msg) => bot.sendMessage(msg.chat.id, getContent(PROPERTY_ID, 'manual')));
-  bot.onText(/\/emergency/, (msg) => bot.sendMessage(msg.chat.id, getContent(PROPERTY_ID, 'emergency')));
-  bot.onText(/\/events/, (msg) => bot.sendMessage(msg.chat.id, getContent(PROPERTY_ID, 'events')));
+  bot.onText(/\/manual/, async (msg) => bot.sendMessage(msg.chat.id, await getContent(PROPERTY_ID, 'manual')));
+  bot.onText(/\/emergency/, async (msg) =>
+    bot.sendMessage(msg.chat.id, await getContent(PROPERTY_ID, 'emergency'))
+  );
+  bot.onText(/\/events/, async (msg) => bot.sendMessage(msg.chat.id, await getContent(PROPERTY_ID, 'events')));
   bot.onText(/\/manager/, (msg) => bot.sendMessage(msg.chat.id, MANAGER_CONTACT));
   bot.onText(/\/cancel/, (msg) => {
     session.clear(msg.chat.id);
@@ -68,9 +70,9 @@ function startBot() {
     if (data === 'main:book') return beginBooking(bot, chatId, PROPERTY_ID);
     if (data === 'book_room') return beginBooking(bot, chatId, BUDGET_PROPERTY_ID);
     if (data === 'main:menu') return showMenuBrowse(bot, chatId);
-    if (data === 'main:manual') return bot.sendMessage(chatId, getContent(PROPERTY_ID, 'manual'));
-    if (data === 'main:emergency') return bot.sendMessage(chatId, getContent(PROPERTY_ID, 'emergency'));
-    if (data === 'main:events') return bot.sendMessage(chatId, getContent(PROPERTY_ID, 'events'));
+    if (data === 'main:manual') return bot.sendMessage(chatId, await getContent(PROPERTY_ID, 'manual'));
+    if (data === 'main:emergency') return bot.sendMessage(chatId, await getContent(PROPERTY_ID, 'emergency'));
+    if (data === 'main:events') return bot.sendMessage(chatId, await getContent(PROPERTY_ID, 'events'));
     if (data === 'main:manager') return bot.sendMessage(chatId, MANAGER_CONTACT);
 
     const s = session.get(chatId);
@@ -104,12 +106,12 @@ async function handleFreeformMessage(bot, msg) {
     );
   }
 
-  conversation.appendMessage(chatId, 'user', msg.text);
-  const history = conversation.getHistory(chatId);
+  await conversation.appendMessage(chatId, 'user', msg.text);
+  const history = await conversation.getHistory(chatId);
 
   try {
-    const reply = await gemini.generateReply(buildSystemPrompt(PROPERTY_ID), history);
-    conversation.appendMessage(chatId, 'model', reply);
+    const reply = await gemini.generateReply(await buildSystemPrompt(PROPERTY_ID), history);
+    await conversation.appendMessage(chatId, 'model', reply);
     bot.sendMessage(chatId, reply, {
       reply_markup: {
         inline_keyboard: [
@@ -129,8 +131,8 @@ function beginBooking(bot, chatId, propertyId) {
   bot.sendMessage(chatId, 'Оформим бронь. Как вас зовут (имя и фамилия)?');
 }
 
-function showMenuBrowse(bot, chatId) {
-  const categories = getMenuCategories(PROPERTY_ID);
+async function showMenuBrowse(bot, chatId) {
+  const categories = await getMenuCategories(PROPERTY_ID);
   if (categories.length === 0) {
     return bot.sendMessage(chatId, 'Меню пока не заполнено.');
   }
@@ -203,23 +205,22 @@ function handleTextStep(bot, msg, s) {
   }
 }
 
-function handleGuests(bot, chatId, s, guests) {
+async function handleGuests(bot, chatId, s, guests) {
   s.data.guests = Number(guests);
   s.step = 'menu';
+  const categories = await getMenuCategories(s.data.propertyId);
   bot.sendMessage(chatId, 'Хотите добавить доп. услуги (завтрак/обед/трансфер)?', {
     reply_markup: {
       inline_keyboard: [
-        ...getMenuCategories(s.data.propertyId).map((c) => [
-          { text: CATEGORY_LABELS[c] || c, callback_data: 'menu_cat:' + c },
-        ]),
+        ...categories.map((c) => [{ text: CATEGORY_LABELS[c] || c, callback_data: 'menu_cat:' + c }]),
         [{ text: 'Пропустить →', callback_data: 'menu_done' }],
       ],
     },
   });
 }
 
-function showMenuItems(bot, chatId, s, category) {
-  const items = getMenuItems(s.data.propertyId, category);
+async function showMenuItems(bot, chatId, s, category) {
+  const items = await getMenuItems(s.data.propertyId, category);
   if (items.length === 0) {
     return bot.sendMessage(chatId, 'В этой категории пока нет позиций.');
   }
@@ -240,10 +241,10 @@ function addMenuItem(bot, chatId, s, menuItemId) {
   bot.sendMessage(chatId, 'Добавлено. Можно выбрать ещё или нажать «Готово».');
 }
 
-function goToPayment(bot, chatId, s) {
+async function goToPayment(bot, chatId, s) {
   s.step = 'payment';
 
-  const pricing = calculatePricing(s.data.propertyId, s.data.checkIn, s.data.checkOut);
+  const pricing = await calculatePricing(s.data.propertyId, s.data.checkIn, s.data.checkOut);
   const priceText = pricing.individual
     ? `${pricing.nights} ноч. — это долгосрочное проживание, точную цену и условия обсудим лично, менеджер свяжется с вами.`
     : `${pricing.nights} ноч. × ${pricing.pricePerNight}₽${pricing.tierLabel ? ` (${pricing.tierLabel})` : ''} = ${pricing.totalAmount}₽\n` +
@@ -285,14 +286,14 @@ async function finalizeBooking(bot, chatId, s, telegramUserId) {
     });
 
     if (s.data.extras.length > 0) {
-      addBookingItems(result.bookingId, s.data.extras);
+      await addBookingItems(result.bookingId, s.data.extras);
     }
 
-    const insertConsent = db.prepare(
-      'INSERT INTO consents (booking_id, telegram_user_id, document_type, document_version) VALUES (?, ?, ?, ?)'
-    );
     for (const docType of CONSENT_DOCS) {
-      insertConsent.run(result.bookingId, String(telegramUserId), docType, 'v1');
+      await db.run(
+        'INSERT INTO consents (booking_id, telegram_user_id, document_type, document_version) VALUES (?, ?, ?, ?)',
+        [result.bookingId, String(telegramUserId), docType, 'v1']
+      );
     }
 
     session.clear(chatId);

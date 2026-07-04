@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 
+const db = require('./db');
 const propertiesRouter = require('./routes/properties');
 const bookingsRouter = require('./routes/bookings');
 const webhookRouter = require('./routes/webhook');
@@ -20,6 +21,13 @@ app.use('/api/admin', adminRouter);
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`apart-server listening on :${port}`));
 
-startBot();
+db.ready
+  .then(() => {
+    app.listen(port, () => console.log(`apart-server listening on :${port}`));
+    startBot();
+  })
+  .catch((err) => {
+    console.error('[index] database init failed', err);
+    process.exit(1);
+  });

@@ -13,20 +13,19 @@ function formatTiers(tiers) {
     .join('\n');
 }
 
-function buildSystemPrompt(propertyId = 1) {
-  const property = db.prepare('SELECT * FROM properties WHERE id = ? AND active = 1').get(propertyId);
-  const content = db
-    .prepare('SELECT content_type, body FROM property_content WHERE property_id = ?')
-    .all(propertyId);
-  const menu = db
-    .prepare('SELECT category, name, description, price FROM menu_items WHERE property_id = ? AND active = 1')
-    .all(propertyId);
-  const tiers = db
-    .prepare('SELECT * FROM pricing_tiers WHERE property_id = ? ORDER BY min_nights')
-    .all(propertyId);
-  const alternatives = db
-    .prepare('SELECT * FROM properties WHERE id != ? AND active = 1')
-    .all(propertyId);
+async function buildSystemPrompt(propertyId = 1) {
+  const property = await db.get('SELECT * FROM properties WHERE id = ? AND active = 1', [propertyId]);
+  const content = await db.all('SELECT content_type, body FROM property_content WHERE property_id = ?', [
+    propertyId,
+  ]);
+  const menu = await db.all(
+    'SELECT category, name, description, price FROM menu_items WHERE property_id = ? AND active = 1',
+    [propertyId]
+  );
+  const tiers = await db.all('SELECT * FROM pricing_tiers WHERE property_id = ? ORDER BY min_nights', [
+    propertyId,
+  ]);
+  const alternatives = await db.all('SELECT * FROM properties WHERE id != ? AND active = 1', [propertyId]);
 
   const contentByType = Object.fromEntries(content.map((c) => [c.content_type, c.body]));
   const menuText = menu.map((m) => `- [${m.category}] ${m.name} — ${m.price}₽ (${m.description || ''})`).join('\n');
@@ -34,17 +33,18 @@ function buildSystemPrompt(propertyId = 1) {
     ? `Залог: ${property.security_deposit}₽ (возврат в течение 1–7 дней после выезда).`
     : 'Залог: не требуется.';
 
-  const alternativesText = alternatives
-    .map((alt) => {
-      const altManual = db
-        .prepare("SELECT body FROM property_content WHERE property_id = ? AND content_type = 'manual'")
-        .get(alt.id);
-      const priceInfo = alt.base_price
-        ? `от ${alt.base_price}₽/сутки`
-        : 'цена обсуждается лично (напиши гостю попросить назвать бюджет)';
-      return `- ${alt.name}: ${alt.description || ''} ${priceInfo}. ${altManual ? altManual.body : ''}`;
-    })
-    .join('\n');
+  const alternativeLines = [];
+  for (const alt of alternatives) {
+    const altManual = await db.get(
+      "SELECT body FROM property_content WHERE property_id = ? AND content_type = 'manual'",
+      [alt.id]
+    );
+    const priceInfo = alt.base_price
+      ? `от ${alt.base_price}₽/сутки`
+      : 'цена обсуждается лично (напиши гостю попросить назвать бюджет)';
+    alternativeLines.push(`- ${alt.name}: ${alt.description || ''} ${priceInfo}. ${altManual ? altManual.body : ''}`);
+  }
+  const alternativesText = alternativeLines.join('\n');
 
   return `${contentByType.persona || 'Ты — AI-менеджер по бронированию апартаментов "Tvoy Apart 24/7".'}
 

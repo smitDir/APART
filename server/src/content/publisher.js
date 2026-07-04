@@ -31,13 +31,11 @@ async function publishDuePosts() {
   }
 
   const bot = new TelegramBot(token, { polling: false });
-  const due = db
-    .prepare(
-      `SELECT * FROM scheduled_posts
-       WHERE channel = 'telegram' AND status = 'generated'
-       AND (scheduled_at IS NULL OR scheduled_at <= datetime('now'))`
-    )
-    .all();
+  const due = await db.all(
+    `SELECT * FROM scheduled_posts
+     WHERE channel = 'telegram' AND status = 'generated'
+     AND (scheduled_at IS NULL OR scheduled_at <= NOW())`
+  );
 
   for (const post of due) {
     try {
@@ -55,13 +53,11 @@ async function publishDuePosts() {
       } else {
         await bot.sendPhoto(channelId, post.media_path, { caption: post.caption || '' });
       }
-      db.prepare("UPDATE scheduled_posts SET status = 'posted', posted_at = datetime('now') WHERE id = ?").run(
-        post.id
-      );
+      await db.run("UPDATE scheduled_posts SET status = 'posted', posted_at = NOW() WHERE id = ?", [post.id]);
       console.log(`[content] posted #${post.id} to Telegram channel`);
     } catch (err) {
       console.error(`[content] failed to post #${post.id}`, err);
-      db.prepare("UPDATE scheduled_posts SET status = 'failed' WHERE id = ?").run(post.id);
+      await db.run("UPDATE scheduled_posts SET status = 'failed' WHERE id = ?", [post.id]);
     }
   }
 }

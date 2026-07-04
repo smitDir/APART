@@ -38,9 +38,10 @@
 
 ## 5. Развёртывание (после установки VPS)
 
-1. VPS: Node.js 20+, nginx как reverse proxy, certbot для HTTPS.
+1. VPS: Ubuntu 24.04, Node.js 20+, MySQL/MariaDB (отдельная база на проект),
+   nginx как reverse proxy, certbot для HTTPS.
 2. Поддомен `api.radegust.ru` → проксирует на `localhost:3000` (порт backend).
-3. `.env` с реальными секретами: `YOOKASSA_SHOP_ID`, `YOOKASSA_SECRET_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `ADMIN_PASSWORD`.
+3. `.env` с реальными секретами: `YOOKASSA_SHOP_ID`, `YOOKASSA_SECRET_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `ADMIN_PASSWORD`, `DB_*`.
 4. Backend как systemd-сервис (`pm2` или `systemd unit`), автозапуск при перезагрузке.
 5. В `index.html` заменить `API_BASE_URL` на `https://api.radegust.ru`.
 
@@ -176,7 +177,9 @@ explicit approve/reject).
 - ~~TELEGRAM_CHAT_ID (личные уведомления менеджеру)~~ ✅ `719900418`
 - Создать YouTube-канал (когда будет готов — подключим YouTube Data API OAuth)
 - Реквизиты ЮKassa (`shop_id`/`secret_key`)
-- VPS — отложено пользователем ("сервер чуть позже")
+- VPS — в процессе: пользователь провизионирует (Ubuntu 24.04, спека и софт-стек
+  обсуждены в сессии), доступ по SSH пришлёт по готовности
+- Домен-поддомен (`api.radegust.ru` → A-запись на IP VPS)
 
 ### 8.8 Данные из чернового промпта продавца (.docx), внесены в БД
 

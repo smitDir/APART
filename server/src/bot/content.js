@@ -1,26 +1,28 @@
 const db = require('../db');
 
-function getProperty(propertyId = 1) {
-  return db.prepare('SELECT * FROM properties WHERE id = ? AND active = 1').get(propertyId);
+async function getProperty(propertyId = 1) {
+  return db.get('SELECT * FROM properties WHERE id = ? AND active = 1', [propertyId]);
 }
 
-function getContent(propertyId, contentType) {
-  const row = db
-    .prepare('SELECT body FROM property_content WHERE property_id = ? AND content_type = ?')
-    .get(propertyId, contentType);
+async function getContent(propertyId, contentType) {
+  const row = await db.get('SELECT body FROM property_content WHERE property_id = ? AND content_type = ?', [
+    propertyId,
+    contentType,
+  ]);
   return row ? row.body : 'Информация пока не заполнена.';
 }
 
-function getMenuItems(propertyId, category) {
-  return db
-    .prepare('SELECT * FROM menu_items WHERE property_id = ? AND category = ? AND active = 1')
-    .all(propertyId, category);
+async function getMenuItems(propertyId, category) {
+  return db.all('SELECT * FROM menu_items WHERE property_id = ? AND category = ? AND active = 1', [
+    propertyId,
+    category,
+  ]);
 }
 
-function getMenuCategories(propertyId) {
-  const rows = db
-    .prepare('SELECT DISTINCT category FROM menu_items WHERE property_id = ? AND active = 1')
-    .all(propertyId);
+async function getMenuCategories(propertyId) {
+  const rows = await db.all('SELECT DISTINCT category FROM menu_items WHERE property_id = ? AND active = 1', [
+    propertyId,
+  ]);
   return rows.map((r) => r.category);
 }
 

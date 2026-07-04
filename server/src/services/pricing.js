@@ -7,17 +7,16 @@ function nightsBetween(checkIn, checkOut) {
 // Возвращает либо { individual: true } — для случаев, которые тарифная сетка
 // не покрывает (30+ ночей, см. TZ.md 8.9) и нужно обсуждать с менеджером
 // лично, либо посчитанную цену.
-function calculatePricing(propertyId, checkIn, checkOut) {
+async function calculatePricing(propertyId, checkIn, checkOut) {
   const nights = nightsBetween(checkIn, checkOut);
-  const property = db.prepare('SELECT * FROM properties WHERE id = ?').get(propertyId);
+  const property = await db.get('SELECT * FROM properties WHERE id = ?', [propertyId]);
 
-  const tier = db
-    .prepare(
-      `SELECT * FROM pricing_tiers WHERE property_id = ? AND min_nights <= ?
-       AND (max_nights IS NULL OR max_nights >= ?)
-       ORDER BY min_nights DESC LIMIT 1`
-    )
-    .get(propertyId, nights, nights);
+  const tier = await db.get(
+    `SELECT * FROM pricing_tiers WHERE property_id = ? AND min_nights <= ?
+     AND (max_nights IS NULL OR max_nights >= ?)
+     ORDER BY min_nights DESC LIMIT 1`,
+    [propertyId, nights, nights]
+  );
 
   if (!tier) {
     return { individual: true, nights };

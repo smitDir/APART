@@ -19,80 +19,79 @@ function basicAuth(req, res, next) {
   next();
 }
 
-router.get('/bookings', basicAuth, (req, res) => {
-  const rows = db.prepare('SELECT * FROM bookings ORDER BY created_at DESC').all();
+router.get('/bookings', basicAuth, async (req, res) => {
+  const rows = await db.all('SELECT * FROM bookings ORDER BY created_at DESC');
   res.json(rows);
 });
 
 // For payment methods that don't go through the YooKassa webhook (bank
 // transfer, cash) — the manager confirms manually once payment is verified.
-router.post('/bookings/:id/confirm', basicAuth, (req, res) => {
+router.post('/bookings/:id/confirm', basicAuth, async (req, res) => {
   const id = Number(req.params.id);
-  const booking = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id);
+  const booking = await db.get('SELECT * FROM bookings WHERE id = ?', [id]);
   if (!booking) return res.status(404).json({ error: 'not found' });
-  db.prepare("UPDATE bookings SET status = 'confirmed' WHERE id = ?").run(id);
+  await db.run("UPDATE bookings SET status = 'confirmed' WHERE id = ?", [id]);
   res.json({ ok: true });
 });
 
 // Content queue: draft a post (caption + prompt for AI generation), then
 // attach the generated media file once it exists (generation itself happens
 // via the RunComfy CLI/skill, outside this server — see server/README.md).
-router.get('/posts', basicAuth, (req, res) => {
-  const rows = db.prepare('SELECT * FROM scheduled_posts ORDER BY created_at DESC').all();
+router.get('/posts', basicAuth, async (req, res) => {
+  const rows = await db.all('SELECT * FROM scheduled_posts ORDER BY created_at DESC');
   res.json(rows);
 });
 
-router.post('/posts', basicAuth, (req, res) => {
+router.post('/posts', basicAuth, async (req, res) => {
   const { channel, caption, mediaPrompt, scheduledAt } = req.body || {};
   if (!channel || !['telegram', 'youtube'].includes(channel)) {
     return res.status(400).json({ error: 'channel must be telegram or youtube' });
   }
-  const info = db
-    .prepare(
-      'INSERT INTO scheduled_posts (channel, caption, media_prompt, scheduled_at) VALUES (?, ?, ?, ?)'
-    )
-    .run(channel, caption || null, mediaPrompt || null, scheduledAt || null);
+  const info = await db.run(
+    'INSERT INTO scheduled_posts (channel, caption, media_prompt, scheduled_at) VALUES (?, ?, ?, ?)',
+    [channel, caption || null, mediaPrompt || null, scheduledAt || null]
+  );
   res.json({ id: info.lastInsertRowid });
 });
 
-router.post('/posts/:id/media', basicAuth, (req, res) => {
+router.post('/posts/:id/media', basicAuth, async (req, res) => {
   const id = Number(req.params.id);
   const { mediaPath, mediaPaths } = req.body || {};
   if (!mediaPath && !mediaPaths) {
     return res.status(400).json({ error: 'mediaPath (string) or mediaPaths (array, for carousel) required' });
   }
-  const post = db.prepare('SELECT * FROM scheduled_posts WHERE id = ?').get(id);
+  const post = await db.get('SELECT * FROM scheduled_posts WHERE id = ?', [id]);
   if (!post) return res.status(404).json({ error: 'not found' });
   // Карусель хранит несколько путей как JSON-массив в том же поле media_path.
   const storedPath = mediaPaths ? JSON.stringify(mediaPaths) : mediaPath;
-  db.prepare("UPDATE scheduled_posts SET media_path = ?, status = 'generated' WHERE id = ?").run(storedPath, id);
+  await db.run("UPDATE scheduled_posts SET media_path = ?, status = 'generated' WHERE id = ?", [storedPath, id]);
   res.json({ ok: true });
 });
 
 // Еженедельное предложение постов: создаётся одним пакетом (см. TZ.md 8.10),
 // утверждается тоже целиком, а не по одному посту.
-router.post('/posts/week', basicAuth, (req, res) => {
+router.post('/posts/week', basicAuth, async (req, res) => {
   const { weekOf, theme, posts } = req.body || {};
   if (!weekOf || !Array.isArray(posts) || posts.length === 0) {
     return res.status(400).json({ error: 'weekOf and non-empty posts[] required' });
   }
-  weeklyPlan.createWeeklyProposal(weekOf, theme, posts);
+  await weeklyPlan.createWeeklyProposal(weekOf, theme, posts);
   res.json({ ok: true, count: posts.length });
 });
 
-router.get('/posts/week/:weekOf', basicAuth, (req, res) => {
-  res.json(weeklyPlan.getWeeklyProposal(req.params.weekOf));
+router.get('/posts/week/:weekOf', basicAuth, async (req, res) => {
+  res.json(await weeklyPlan.getWeeklyProposal(req.params.weekOf));
 });
 
-router.post('/posts/week/:weekOf/approve', basicAuth, (req, res) => {
-  const count = weeklyPlan.approveWeeklyProposal(req.params.weekOf);
+router.post('/posts/week/:weekOf/approve', basicAuth, async (req, res) => {
+  const count = await weeklyPlan.approveWeeklyProposal(req.params.weekOf);
   res.json({ ok: true, approved: count });
 });
 
-router.post('/themes', basicAuth, (req, res) => {
+router.post('/themes', basicAuth, async (req, res) => {
   const { month, theme, notes } = req.body || {};
   if (!month || !theme) return res.status(400).json({ error: 'month and theme required' });
-  weeklyPlan.setMonthTheme(month, theme, notes);
+  await weeklyPlan.setMonthTheme(month, theme, notes);
   res.json({ ok: true });
 });
 

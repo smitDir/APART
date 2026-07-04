@@ -1,19 +1,28 @@
 # apart-server
 
-Backend для бронирования Tvoy Apart 24/7. Node.js + Express + SQLite.
+Backend для бронирования Tvoy Apart 24/7. Node.js + Express + MySQL.
 
 ## Запуск локально
+
+Нужен доступный MySQL/MariaDB сервер (локально или на VPS) и пустая база
+(см. `DB_NAME` в `.env`) — схема и начальные данные создаются автоматически
+при первом старте (`server/src/db.js`, `init()`/`seed()`).
 
 ```bash
 cd server
 npm install
-cp .env.example .env   # заполнить реальными ключами по необходимости
+cp .env.example .env   # заполнить DB_* и остальными реальными ключами
+mysql -u root -e "CREATE DATABASE apart; CREATE USER 'apart'@'localhost' IDENTIFIED BY '...'; GRANT ALL ON apart.* TO 'apart'@'localhost';"
 npm start
 ```
 
 Без заполненных `YOOKASSA_*`/`TELEGRAM_*` сервер работает: заявки сохраняются,
 оплата по ссылке не создаётся (просто `confirmationUrl: null`), уведомления
 пишутся в консоль вместо Telegram, бот не запускается (только лог в консоль).
+
+**Каждый проект/направление — своя база данных** на одном MySQL-сервере VPS
+(один `DB_NAME` на проект), а не общая база на всё. Так проще держать данные
+разных бизнесов изолированными и не думать о префиксах таблиц.
 
 ## Telegram-бот (бронирование через чат)
 
@@ -25,7 +34,7 @@ npm start
 
 Меню питания/трансфера и тексты инструкций/экстренных служб/мероприятий
 хранятся в таблицах `menu_items` / `property_content` — редактируются
-напрямую в БД (`sqlite3 data.sqlite`), без правки кода.
+напрямую в БД (`mysql -u apart -p apart`), без правки кода.
 
 Согласие на обработку ПД/договор/правила проживания — простое согласие в
 боте (кнопка «Согласен»), лог сохраняется в таблице `consents`
@@ -51,8 +60,8 @@ npm start
 
 ## Развёртывание на VPS
 
-1. Node.js 20+, `npm install --production`.
-2. Заполнить `.env` реальными ключами ЮKassa и Telegram.
+1. Node.js 20+, MySQL/MariaDB сервер (общий на VPS, отдельная база `DB_NAME` под этот проект), `npm install --production`.
+2. Заполнить `.env` реальными ключами ЮKassa, Telegram и параметрами `DB_*`.
 3. Запускать как systemd-сервис или через `pm2 start src/index.js --name apart-server`.
 4. nginx: проксировать поддомен (например `api.radegust.ru`) на `localhost:3000`, HTTPS через certbot.
 5. В `index.html` заменить `window.APART_API_BASE_URL` на реальный адрес API (или задать глобальную переменную перед подключением скрипта).

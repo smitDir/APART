@@ -12,14 +12,13 @@ class BookingError extends Error {
   }
 }
 
-function hasConflict(propertyId, checkIn, checkOut) {
-  const overlap = db
-    .prepare(
-      `SELECT COUNT(*) AS n FROM bookings
-       WHERE property_id = ? AND status IN ('paid', 'confirmed')
-       AND check_in < ? AND check_out > ?`
-    )
-    .get(propertyId, checkOut, checkIn);
+async function hasConflict(propertyId, checkIn, checkOut) {
+  const overlap = await db.get(
+    `SELECT COUNT(*) AS n FROM bookings
+     WHERE property_id = ? AND status IN ('paid', 'confirmed')
+     AND check_in < ? AND check_out > ?`,
+    [propertyId, checkOut, checkIn]
+  );
   return overlap.n > 0;
 }
 
@@ -47,37 +46,37 @@ async function createBooking(input) {
     throw new BookingError('validation', 'invalid date range');
   }
 
-  const property = db.prepare('SELECT * FROM properties WHERE id = ? AND active = 1').get(propertyId);
+  const property = await db.get('SELECT * FROM properties WHERE id = ? AND active = 1', [propertyId]);
   if (!property) {
     throw new BookingError('not_found', 'property not found');
   }
 
-  if (hasConflict(propertyId, checkIn, checkOut)) {
+  if (await hasConflict(propertyId, checkIn, checkOut)) {
     throw new BookingError('conflict', 'dates not available');
   }
 
-  const pricing = calculatePricing(propertyId, checkIn, checkOut);
+  const pricing = await calculatePricing(propertyId, checkIn, checkOut);
 
-  const insert = db.prepare(
+  const info = await db.run(
     `INSERT INTO bookings
      (property_id, full_name, phone, email, check_in, check_out, guests, children, purpose, payment_method, services, comments, status, total_amount, advance_amount)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
-  );
-  const info = insert.run(
-    propertyId,
-    fullName,
-    phone,
-    email,
-    checkIn,
-    checkOut,
-    Number(guests),
-    Number(children) || 0,
-    purpose || null,
-    payment,
-    JSON.stringify(services),
-    comments || null,
-    pricing.individual ? null : pricing.totalAmount,
-    pricing.individual ? null : pricing.advanceAmount
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+    [
+      propertyId,
+      fullName,
+      phone,
+      email,
+      checkIn,
+      checkOut,
+      Number(guests),
+      Number(children) || 0,
+      purpose || null,
+      payment,
+      JSON.stringify(services),
+      comments || null,
+      pricing.individual ? null : pricing.totalAmount,
+      pricing.individual ? null : pricing.advanceAmount,
+    ]
   );
   const bookingId = info.lastInsertRowid;
 
@@ -99,7 +98,7 @@ async function createBooking(input) {
         bookingId,
         returnUrl: process.env.BOOKING_RETURN_URL || 'https://radegust.ru/lending/apart/',
       });
-      db.prepare('UPDATE bookings SET yookassa_payment_id = ? WHERE id = ?').run(paymentObj.id, bookingId);
+      await db.run('UPDATE bookings SET yookassa_payment_id = ? WHERE id = ?', [paymentObj.id, bookingId]);
       confirmationUrl = paymentObj.confirmation?.confirmation_url || null;
     } catch (err) {
       console.error('[bookingService] payment creation failed', err);
@@ -109,14 +108,16 @@ async function createBooking(input) {
   return { bookingId, status: 'pending', confirmationUrl, pricing };
 }
 
-function addBookingItems(bookingId, items) {
-  const insert = db.prepare(
-    'INSERT INTO booking_items (booking_id, menu_item_id, quantity) VALUES (?, ?, ?)'
-  );
-  const tx = db.transaction((rows) => {
-    for (const row of rows) insert.run(bookingId, row.menuItemId, row.quantity || 1);
+async function addBookingItems(bookingId, items) {
+  await db.transaction(async (tx) => {
+    for (const row of items) {
+      await tx.run('INSERT INTO booking_items (booking_id, menu_item_id, quantity) VALUES (?, ?, ?)', [
+        bookingId,
+        row.menuItemId,
+        row.quantity || 1,
+      ]);
+    }
   });
-  tx(items);
 }
 
 module.exports = { createBooking, addBookingItems, hasConflict, BookingError };
