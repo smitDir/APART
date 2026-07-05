@@ -7,6 +7,11 @@ function isVideo(mediaPath) {
   return /\.(mp4|mov|mkv)$/i.test(mediaPath);
 }
 
+const BOT_USERNAME = 'tvoy_apart_bot';
+const BOOK_BUTTON = {
+  reply_markup: { inline_keyboard: [[{ text: '📅 Забронировать', url: `https://t.me/${BOT_USERNAME}?start=book` }]] },
+};
+
 // Карусель: несколько фото/видео в одном сообщении (свайпается в Telegram),
 // media_path хранит JSON-массив путей вместо одного пути.
 async function publishCarousel(bot, channelId, post) {
@@ -21,6 +26,9 @@ async function publishCarousel(bot, channelId, post) {
     ...(i === 0 && post.caption ? { caption: post.caption } : {}),
   }));
   await bot.sendMediaGroup(channelId, media);
+  // Bot API не даёт прикрепить inline-кнопку к самой медиагруппе — шлём её
+  // отдельным сообщением сразу следом.
+  await bot.sendMessage(channelId, 'Забронировать это предложение:', BOOK_BUTTON);
 }
 
 async function publishTelegramDue() {
@@ -50,9 +58,9 @@ async function publishTelegramDue() {
         console.error(`[content] post #${post.id} has no valid media_path, skipping`);
         continue;
       } else if (isVideo(post.media_path)) {
-        await bot.sendVideo(channelId, post.media_path, { caption: post.caption || '' });
+        await bot.sendVideo(channelId, post.media_path, { caption: post.caption || '', ...BOOK_BUTTON });
       } else {
-        await bot.sendPhoto(channelId, post.media_path, { caption: post.caption || '' });
+        await bot.sendPhoto(channelId, post.media_path, { caption: post.caption || '', ...BOOK_BUTTON });
       }
       await db.run("UPDATE scheduled_posts SET status = 'posted', posted_at = NOW() WHERE id = ?", [post.id]);
       console.log(`[content] posted #${post.id} to Telegram channel`);

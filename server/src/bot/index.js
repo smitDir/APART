@@ -87,6 +87,9 @@ function startBot() {
     const payload = match[1];
     const bookingId = payload && /^b\d+$/.test(payload) ? Number(payload.slice(1)) : null;
     if (bookingId) return confirmTelegramChannel(bot, msg, bookingId);
+    // Кнопка "Забронировать" под постами в канале ведёт сюда (t.me/bot?start=book) —
+    // сразу в сценарий брони, а не в общее меню.
+    if (payload === 'book') return beginBooking(bot, msg.chat.id, PROPERTY_ID);
     sendMainMenu(bot, msg.chat.id);
   });
   bot.onText(/^\/menu_main$/, (msg) => sendMainMenu(bot, msg.chat.id));
