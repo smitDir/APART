@@ -147,26 +147,26 @@
 
   <div id="bookingMessage" style="display:none;padding:15px;border-radius:8px;margin:20px 0;"></div>
 
-  <form id="bookingForm" style="background:#fff;padding:25px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.1);margin:20px 0;">
+  <form id="bookingForm" novalidate style="background:#fff;padding:25px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.1);margin:20px 0;">
 
     <h3 style="margin-top:0;">Персональные данные</h3>
-    <label style="display:block;margin-bottom:5px;font-weight:bold;">Имя и фамилия *</label>
+    <label style="display:block;margin-bottom:5px;font-weight:bold;">Имя и фамилия <span style="color:red;">*</span></label>
     <input type="text" name="fullName" required style="width:100%;padding:8px;margin-bottom:15px;border:1px solid #ccc;border-radius:5px;box-sizing:border-box;"/>
 
-    <label style="display:block;margin-bottom:5px;font-weight:bold;">Телефон *</label>
+    <label style="display:block;margin-bottom:5px;font-weight:bold;">Телефон <span style="color:red;">*</span></label>
     <input type="tel" name="phone" required placeholder="+7 (___) ___-__-__" style="width:100%;padding:8px;margin-bottom:15px;border:1px solid #ccc;border-radius:5px;box-sizing:border-box;"/>
 
-    <label style="display:block;margin-bottom:5px;font-weight:bold;">Электронная почта *</label>
+    <label style="display:block;margin-bottom:5px;font-weight:bold;">Электронная почта <span style="color:red;">*</span></label>
     <input type="email" name="email" required style="width:100%;padding:8px;margin-bottom:15px;border:1px solid #ccc;border-radius:5px;box-sizing:border-box;"/>
 
     <h3>Детали бронирования</h3>
-    <label style="display:block;margin-bottom:5px;font-weight:bold;">Дата заезда *</label>
+    <label style="display:block;margin-bottom:5px;font-weight:bold;">Дата заезда <span style="color:red;">*</span></label>
     <input type="date" name="checkIn" required style="width:100%;padding:8px;margin-bottom:15px;border:1px solid #ccc;border-radius:5px;box-sizing:border-box;"/>
 
-    <label style="display:block;margin-bottom:5px;font-weight:bold;">Дата выезда *</label>
+    <label style="display:block;margin-bottom:5px;font-weight:bold;">Дата выезда <span style="color:red;">*</span></label>
     <input type="date" name="checkOut" required style="width:100%;padding:8px;margin-bottom:15px;border:1px solid #ccc;border-radius:5px;box-sizing:border-box;"/>
 
-    <label style="display:block;margin-bottom:5px;font-weight:bold;">Количество взрослых гостей *</label>
+    <label style="display:block;margin-bottom:5px;font-weight:bold;">Количество взрослых гостей <span style="color:red;">*</span></label>
     <select name="guests" required style="width:100%;padding:8px;margin-bottom:15px;border:1px solid #ccc;border-radius:5px;box-sizing:border-box;">
       <option value="">— Выберите —</option>
       <option value="1">1 гость</option>
@@ -224,12 +224,35 @@
     <div style="background:#f9f3e8;padding:15px;border-radius:8px;margin-bottom:15px;border:1px solid #e0d0b8;">
       <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;">
         <input type="checkbox" name="consent" required style="margin-top:4px;min-width:18px;min-height:18px;"/>
-        <span>Я даю согласие на обработку моих персональных данных в соответствии с <a href="https://apart247.ru/guest-privacy" target="_blank" rel="noopener" style="color:#4a3728;">Политикой конфиденциальности</a> и подтверждаю, что ознакомлен(а) с <a href="https://apart247.ru/rental-terms" target="_blank" rel="noopener" style="color:#4a3728;">условиями бронирования</a>. Данные используются исключительно для обработки заявки и связи с вами. *</span>
+        <span>Я даю согласие на обработку моих персональных данных в соответствии с <a href="https://apart247.ru/guest-privacy" target="_blank" rel="noopener" style="color:#4a3728;">Политикой конфиденциальности</a> и подтверждаю, что ознакомлен(а) с <a href="https://apart247.ru/rental-terms" target="_blank" rel="noopener" style="color:#4a3728;">условиями бронирования</a>. Данные используются исключительно для обработки заявки и связи с вами. <span style="color:red;">*</span></span>
       </label>
     </div>
 
     <button type="submit" style="width:100%;padding:14px;background-color:#4a3728;color:#fff;border:none;border-radius:5px;font-size:16px;cursor:pointer;font-family:inherit;">Отправить заявку на бронирование</button>
   </form>
+
+  <div id="errorModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);align-items:center;justify-content:center;z-index:1000;">
+    <div style="background:#fff;padding:24px;border-radius:10px;max-width:360px;width:90%;box-shadow:0 4px 16px rgba(0,0,0,0.2);">
+      <p id="errorModalText" style="margin:0 0 16px;color:#8a2f2f;"></p>
+      <button type="button" id="errorModalOk" style="width:100%;padding:10px;background:#4a3728;color:#fff;border:none;border-radius:5px;cursor:pointer;font-family:inherit;">ОК</button>
+    </div>
+  </div>
+
+  <div id="channelModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);align-items:center;justify-content:center;z-index:1000;">
+    <div style="background:#fff;padding:24px;border-radius:10px;max-width:360px;width:90%;box-shadow:0 4px 16px rgba(0,0,0,0.2);">
+      <p style="margin:0 0 12px;font-weight:bold;">Выберите канал связи для уведомлений.</p>
+      <label style="display:block;margin-bottom:8px;cursor:pointer;">
+        <input type="radio" name="notifyChannel" value="email" checked/> Электронная почта
+      </label>
+      <label style="display:block;margin-bottom:8px;cursor:pointer;">
+        <input type="radio" name="notifyChannel" value="telegram"/> Telegram
+      </label>
+      <div id="telegramHandleWrap" style="display:none;margin:8px 0 4px;">
+        <input type="text" id="telegramHandleInput" placeholder="@username" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:5px;box-sizing:border-box;"/>
+      </div>
+      <button type="button" id="channelModalOk" style="width:100%;padding:10px;background:#4a3728;color:#fff;border:none;border-radius:5px;cursor:pointer;font-family:inherit;margin-top:12px;">Продолжить</button>
+    </div>
+  </div>
 
   <hr style="margin-top:40px;border-color:#c9a96e"/>
 
@@ -321,9 +344,98 @@
         messageBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
 
+      // Свой попап вместо alert()/confirm() — нативные диалоги при повторном
+      // вызове обрастают чекбоксом "больше не показывать", это не отключить из JS.
+      var errorModal = document.getElementById('errorModal');
+      var errorModalText = document.getElementById('errorModalText');
+      var errorModalOk = document.getElementById('errorModalOk');
+      var pendingFocusEl = null;
+
+      function showErrorModal(message, el) {
+        errorModalText.textContent = message;
+        pendingFocusEl = el;
+        errorModal.style.display = 'flex';
+      }
+      errorModalOk.addEventListener('click', function () {
+        errorModal.style.display = 'none';
+        if (pendingFocusEl) pendingFocusEl.focus();
+      });
+
+      var requiredFields = [
+        { el: form.querySelector('[name=fullName]'), message: 'Заполните поле «Имя и фамилия».' },
+        { el: form.querySelector('[name=phone]'), message: 'Заполните поле «Телефон».' },
+        { el: form.querySelector('[name=email]'), message: 'Заполните поле «Электронная почта».' },
+        { el: form.querySelector('[name=checkIn]'), message: 'Укажите дату заезда.' },
+        { el: form.querySelector('[name=checkOut]'), message: 'Укажите дату выезда.' },
+        { el: form.querySelector('[name=guests]'), message: 'Укажите количество гостей.' },
+      ];
+
+      function validateForm() {
+        for (var i = 0; i < requiredFields.length; i++) {
+          if (!requiredFields[i].el.value) return requiredFields[i];
+        }
+        var emailEl = form.querySelector('[name=email]');
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailEl.value)) {
+          return { el: emailEl, message: 'Введите корректный адрес электронной почты.' };
+        }
+        var consentEl = form.querySelector('[name=consent]');
+        if (!consentEl.checked) {
+          return { el: consentEl, message: 'Необходимо согласие на обработку персональных данных.' };
+        }
+        return null;
+      }
+
+      // Попап выбора канала уведомлений — показывается только после успешной
+      // валидации, перед фактической отправкой заявки.
+      var channelModal = document.getElementById('channelModal');
+      var channelModalOk = document.getElementById('channelModalOk');
+      var telegramWrap = document.getElementById('telegramHandleWrap');
+      var telegramInput = document.getElementById('telegramHandleInput');
+      var channelRadios = document.querySelectorAll('input[name=notifyChannel]');
+
+      function updateTelegramVisibility() {
+        var checked = document.querySelector('input[name=notifyChannel]:checked');
+        telegramWrap.style.display = checked && checked.value === 'telegram' ? 'block' : 'none';
+      }
+      Array.prototype.forEach.call(channelRadios, function (r) {
+        r.addEventListener('change', updateTelegramVisibility);
+      });
+
+      channelModalOk.addEventListener('click', function () {
+        var checked = document.querySelector('input[name=notifyChannel]:checked');
+        var channel = checked ? checked.value : 'email';
+        var telegramHandle = '';
+        if (channel === 'telegram') {
+          telegramHandle = telegramInput.value.trim();
+          if (!telegramHandle) {
+            telegramInput.focus();
+            return;
+          }
+        }
+        channelModal.style.display = 'none';
+        submitBooking(channel, telegramHandle);
+      });
+
       form.addEventListener('submit', function (e) {
         e.preventDefault();
+        var invalid = validateForm();
+        if (invalid) {
+          showErrorModal(invalid.message, invalid.el);
+          return;
+        }
+        document.querySelector('input[name=notifyChannel][value=email]').checked = true;
+        telegramInput.value = '';
+        updateTelegramVisibility();
+        channelModal.style.display = 'flex';
+      });
+
+      function submitBooking(notifyChannel, telegramHandle) {
         var formData = new FormData(form);
+        var channelNote = notifyChannel === 'telegram'
+          ? 'Канал уведомлений: Telegram (' + telegramHandle + ')'
+          : 'Канал уведомлений: электронная почта';
+        var comments = formData.get('comments');
+
         var payload = {
           propertyId: PROPERTY_ID,
           fullName: formData.get('fullName'),
@@ -336,8 +448,10 @@
           purpose: formData.get('purpose'),
           payment: formData.get('payment'),
           services: formData.getAll('services'),
-          comments: formData.get('comments'),
+          comments: channelNote + (comments ? '\n' + comments : ''),
           consent: formData.get('consent') === 'on',
+          contactChannel: notifyChannel,
+          telegramHandle: telegramHandle || undefined,
         };
 
         var submitBtn = form.querySelector('button[type="submit"]');
@@ -373,7 +487,7 @@
             submitBtn.disabled = false;
             submitBtn.textContent = 'Отправить заявку на бронирование';
           });
-      });
+      }
     })();
   </script>
 </body>
