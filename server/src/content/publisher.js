@@ -1,5 +1,5 @@
 const fs = require('fs');
-const TelegramBot = require('node-telegram-bot-api');
+const { TelegramBot } = require('node-telegram-bot-api');
 const db = require('../db');
 const youtube = require('./youtube');
 

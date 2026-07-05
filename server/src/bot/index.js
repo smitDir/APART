@@ -1,4 +1,4 @@
-const TelegramBot = require('node-telegram-bot-api');
+const { TelegramBot } = require('node-telegram-bot-api');
 const db = require('../db');
 const session = require('./session');
 const { createBooking, addBookingItems, BookingError } = require('../services/bookingService');
