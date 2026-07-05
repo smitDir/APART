@@ -332,6 +332,7 @@ async function finalizeBooking(bot, chatId, s, telegramUserId) {
   try {
     const result = await createBooking({
       propertyId: s.data.propertyId,
+      channel: 'telegram_bot',
       fullName: s.data.fullName,
       phone: s.data.phone,
       email: s.data.email,

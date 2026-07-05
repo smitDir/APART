@@ -2,22 +2,36 @@ require('dotenv').config();
 const path = require('path');
 const express = require('express');
 const cors = require('cors');
+const session = require('express-session');
 
 const db = require('./db');
 const propertiesRouter = require('./routes/properties');
 const bookingsRouter = require('./routes/bookings');
 const webhookRouter = require('./routes/webhook');
 const adminRouter = require('./routes/admin');
+const { router: adminPanelRouter } = require('./routes/adminPanel');
 const { startBot } = require('./bot');
 
 const app = express();
+// nginx проксирует по HTTP, но реальный клиент приходит по HTTPS — без этого
+// express-session не выставит secure-cookie (см. cookie.secure: 'auto' ниже).
+app.set('trust proxy', 1);
 app.use(cors({ origin: process.env.ALLOWED_ORIGIN || '*' }));
 app.use(express.json());
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || 'change-me',
+    resave: false,
+    saveUninitialized: false,
+    cookie: { httpOnly: true, secure: 'auto', sameSite: 'lax', maxAge: 12 * 60 * 60 * 1000 },
+  })
+);
 
 app.use('/api/properties', propertiesRouter);
 app.use('/api/bookings', bookingsRouter);
 app.use('/api/webhooks', webhookRouter);
 app.use('/api/admin', adminRouter);
+app.use('/admin', adminPanelRouter);
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 

@@ -25,6 +25,7 @@ async function hasConflict(propertyId, checkIn, checkOut) {
 async function createBooking(input) {
   const {
     propertyId = 1,
+    channel = 'web',
     fullName,
     phone,
     email,
@@ -59,10 +60,11 @@ async function createBooking(input) {
 
   const info = await db.run(
     `INSERT INTO bookings
-     (property_id, full_name, phone, email, check_in, check_out, guests, children, purpose, payment_method, services, comments, status, total_amount, advance_amount)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+     (property_id, channel, full_name, phone, email, check_in, check_out, guests, children, purpose, payment_method, services, comments, status, total_amount, advance_amount)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
     [
       propertyId,
+      channel,
       fullName,
       phone,
       email,

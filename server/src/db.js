@@ -1,4 +1,5 @@
 const mysql = require('mysql2/promise');
+const bcrypt = require('bcryptjs');
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
@@ -77,6 +78,7 @@ const SCHEMA = `
   CREATE TABLE IF NOT EXISTS bookings (
     id INT PRIMARY KEY AUTO_INCREMENT,
     property_id INT NOT NULL,
+    channel VARCHAR(16) NOT NULL DEFAULT 'web', -- 'web' | 'telegram_bot'
     full_name TEXT NOT NULL,
     phone VARCHAR(32) NOT NULL,
     email VARCHAR(255) NOT NULL,
@@ -147,6 +149,15 @@ const SCHEMA = `
     month VARCHAR(7) NOT NULL, -- '2026-07'
     theme TEXT NOT NULL,
     notes TEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  -- Логины для /admin/... — отдельно от Basic Auth (ADMIN_USER/ADMIN_PASSWORD),
+  -- который остаётся только для существующих /api/admin/* эндпоинтов.
+  CREATE TABLE IF NOT EXISTS admin_users (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    username VARCHAR(64) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -299,9 +310,33 @@ async function seed() {
   }
 }
 
+// Уже развёрнутая БД создавалась до появления bookings.channel — CREATE TABLE
+// IF NOT EXISTS его туда не добавит, нужен явный ALTER для старых установок.
+async function migrate() {
+  const [rows] = await pool.query(
+    `SELECT COUNT(*) AS n FROM information_schema.columns
+     WHERE table_schema = DATABASE() AND table_name = 'bookings' AND column_name = 'channel'`
+  );
+  if (rows[0].n === 0) {
+    await pool.query("ALTER TABLE bookings ADD COLUMN channel VARCHAR(16) NOT NULL DEFAULT 'web' AFTER property_id");
+  }
+}
+
+// Первый /admin-логин наследуется от уже настроенных ADMIN_USER/ADMIN_PASSWORD,
+// чтобы переход на хранение в БД не отрезал доступ владельцу.
+async function seedAdminUser() {
+  const count = (await get('SELECT COUNT(*) AS n FROM admin_users')).n;
+  if (count === 0 && process.env.ADMIN_USER && process.env.ADMIN_PASSWORD) {
+    const hash = await bcrypt.hash(process.env.ADMIN_PASSWORD, 10);
+    await run('INSERT INTO admin_users (username, password_hash) VALUES (?, ?)', [process.env.ADMIN_USER, hash]);
+  }
+}
+
 async function init() {
   await pool.query(SCHEMA);
+  await migrate();
   await seed();
+  await seedAdminUser();
 }
 
 const ready = init();
