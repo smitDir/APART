@@ -117,6 +117,7 @@ const SORT_COLUMNS = {
   full_name: 'b.full_name',
   phone: 'b.phone',
   email: 'b.email',
+  telegram: 'b.telegram',
   guests: 'b.guests',
   status: 'b.status',
   payment_method: 'b.payment_method',
@@ -227,6 +228,7 @@ router.get('/request', requireAdminAuth, async (req, res) => {
         <td>${escapeHtml(b.full_name)}</td>
         <td>${escapeHtml(b.phone)}</td>
         <td>${escapeHtml(b.email)}</td>
+        <td>${escapeHtml(b.telegram)}</td>
         <td>${b.guests}</td>
         <td>${escapeHtml(b.status)}</td>
         <td>${escapeHtml(b.payment_method)}</td>
@@ -284,6 +286,7 @@ router.get('/request', requireAdminAuth, async (req, res) => {
             <th>${sortLink(req, 'full_name', 'Имя')}</th>
             <th>${sortLink(req, 'phone', 'Телефон')}</th>
             <th>${sortLink(req, 'email', 'Email')}</th>
+            <th>${sortLink(req, 'telegram', 'Telegram')}</th>
             <th>${sortLink(req, 'guests', 'Гостей')}</th>
             <th>${sortLink(req, 'status', 'Статус')}</th>
             <th>${sortLink(req, 'payment_method', 'Оплата')}</th>
@@ -291,7 +294,7 @@ router.get('/request', requireAdminAuth, async (req, res) => {
             <th>${sortLink(req, 'advance_amount', 'Аванс')}</th>
             <th>Комментарий</th><th>Действия</th><th>Удалено</th>
           </tr></thead>
-          <tbody>${tableRows || '<tr><td colspan="17">Заявок не найдено.</td></tr>'}</tbody>
+          <tbody>${tableRows || '<tr><td colspan="18">Заявок не найдено.</td></tr>'}</tbody>
         </table>
       </div>
       ${pagination}
@@ -337,6 +340,8 @@ router.get('/request/new', requireAdminAuth, async (req, res) => {
         <input type="text" name="phone" required>
         <label>Email</label>
         <input type="text" name="email" required>
+        <label>Telegram (необязательно)</label>
+        <input type="text" name="telegram" placeholder="@username">
         <label>Заезд (ГГГГ-ММ-ДД)</label>
         <input type="date" name="check_in" required>
         <label>Выезд (ГГГГ-ММ-ДД)</label>
@@ -364,7 +369,7 @@ router.get('/request/new', requireAdminAuth, async (req, res) => {
 
 router.post('/request/new', requireAdminAuth, express.urlencoded({ extended: false }), async (req, res) => {
   const {
-    property_id, full_name, phone, email, check_in, check_out, guests, children,
+    property_id, full_name, phone, email, telegram, check_in, check_out, guests, children,
     status, payment_method, total_amount, advance_amount, comments,
   } = req.body || {};
 
@@ -376,13 +381,14 @@ router.post('/request/new', requireAdminAuth, express.urlencoded({ extended: fal
 
   const info = await db.run(
     `INSERT INTO bookings
-     (property_id, channel, full_name, phone, email, check_in, check_out, guests, children, payment_method, status, total_amount, advance_amount, comments)
-     VALUES (?, 'admin', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (property_id, channel, full_name, phone, email, telegram, check_in, check_out, guests, children, payment_method, status, total_amount, advance_amount, comments)
+     VALUES (?, 'admin', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       Number(property_id) || 1,
       full_name,
       phone,
       email,
+      telegram || null,
       check_in,
       check_out,
       Number(guests) || 1,
@@ -415,6 +421,8 @@ router.get('/request/:id/edit', requireAdminAuth, async (req, res) => {
         <input type="text" name="phone" value="${escapeHtml(b.phone)}" required>
         <label>Email</label>
         <input type="text" name="email" value="${escapeHtml(b.email)}" required>
+        <label>Telegram (необязательно)</label>
+        <input type="text" name="telegram" value="${escapeHtml(b.telegram)}" placeholder="@username">
         <label>Заезд (ГГГГ-ММ-ДД)</label>
         <input type="date" name="check_in" value="${escapeHtml(b.check_in)}" required>
         <label>Выезд (ГГГГ-ММ-ДД)</label>
@@ -446,7 +454,7 @@ router.post('/request/:id/edit', requireAdminAuth, express.urlencoded({ extended
   if (!existing) return res.status(404).send(pageShell('Не найдено', '<p>Заявка не найдена.</p>'));
 
   const {
-    full_name, phone, email, check_in, check_out, guests, children,
+    full_name, phone, email, telegram, check_in, check_out, guests, children,
     status, payment_method, total_amount, advance_amount, comments,
   } = req.body || {};
 
@@ -458,13 +466,14 @@ router.post('/request/:id/edit', requireAdminAuth, express.urlencoded({ extended
 
   await db.run(
     `UPDATE bookings SET
-       full_name = ?, phone = ?, email = ?, check_in = ?, check_out = ?, guests = ?, children = ?,
+       full_name = ?, phone = ?, email = ?, telegram = ?, check_in = ?, check_out = ?, guests = ?, children = ?,
        status = ?, payment_method = ?, total_amount = ?, advance_amount = ?, comments = ?
      WHERE id = ?`,
     [
       full_name,
       phone,
       email,
+      telegram || null,
       check_in,
       check_out,
       Number(guests) || 1,

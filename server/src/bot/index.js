@@ -49,6 +49,31 @@ function mainMenuKeyboard() {
   };
 }
 
+function sendMainMenu(bot, chatId) {
+  session.clear(chatId);
+  bot.sendMessage(chatId, 'Добро пожаловать в Tvoy Apart 24/7! Выберите действие:', {
+    reply_markup: mainMenuKeyboard(),
+  });
+}
+
+// Гость выбрал на сайте «уведомлять в Telegram» — Bot API не может написать
+// первым по свободно введённому @handle (нужен chat_id, который появляется
+// только когда сам гость напишет боту), поэтому сайт даёт ссылку-диплинк
+// вида t.me/bot?start=b<id>, и подтверждение приходит именно здесь, по факту перехода.
+async function confirmTelegramChannel(bot, msg, bookingId) {
+  const booking = await db.get('SELECT * FROM bookings WHERE id = ?', [bookingId]);
+  if (!booking) {
+    return bot.sendMessage(msg.chat.id, 'Не нашли такую заявку. Если это ошибка — напишите менеджеру /manager.');
+  }
+  const handle = msg.from.username ? '@' + msg.from.username : `chat:${msg.chat.id}`;
+  await db.run('UPDATE bookings SET telegram = ? WHERE id = ?', [handle, bookingId]);
+  bot.sendMessage(
+    msg.chat.id,
+    `Заявка №${bookingId} принята и обрабатывается.\n${booking.full_name}, ${booking.check_in} → ${booking.check_out}.\n` +
+      'Будем присылать уведомления сюда, в Telegram.'
+  );
+}
+
 function startBot() {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) {
@@ -58,12 +83,13 @@ function startBot() {
 
   const bot = new TelegramBot(token, { polling: true });
 
-  bot.onText(/\/start|\/menu_main/, (msg) => {
-    session.clear(msg.chat.id);
-    bot.sendMessage(msg.chat.id, 'Добро пожаловать в Tvoy Apart 24/7! Выберите действие:', {
-      reply_markup: mainMenuKeyboard(),
-    });
+  bot.onText(/^\/start(?:\s+(\S+))?$/, (msg, match) => {
+    const payload = match[1];
+    const bookingId = payload && /^b\d+$/.test(payload) ? Number(payload.slice(1)) : null;
+    if (bookingId) return confirmTelegramChannel(bot, msg, bookingId);
+    sendMainMenu(bot, msg.chat.id);
   });
+  bot.onText(/^\/menu_main$/, (msg) => sendMainMenu(bot, msg.chat.id));
 
   bot.onText(/\/book/, (msg) => beginBooking(bot, msg.chat.id, PROPERTY_ID));
   bot.onText(/\/manual/, async (msg) => bot.sendMessage(msg.chat.id, await getContent(PROPERTY_ID, 'manual')));
@@ -98,7 +124,7 @@ function startBot() {
     if (data === 'menu_done') return goToPayment(bot, chatId, s);
     if (data.startsWith('guests:')) return handleGuests(bot, chatId, s, data.slice('guests:'.length));
     if (data.startsWith('payment:')) return handlePayment(bot, chatId, s, data.slice('payment:'.length));
-    if (data === 'consent_accept') return finalizeBooking(bot, chatId, s, query.from.id);
+    if (data === 'consent_accept') return finalizeBooking(bot, chatId, s, query.from);
   });
 
   bot.on('message', (msg) => {
@@ -328,14 +354,18 @@ function handlePayment(bot, chatId, s, method) {
   });
 }
 
-async function finalizeBooking(bot, chatId, s, telegramUserId) {
+async function finalizeBooking(bot, chatId, s, from) {
   try {
+    // Гость и так пишет из Telegram — берём хендл из самого API, а не
+    // переспрашиваем то, что уже известно из апдейта.
+    const telegramHandle = from.username ? '@' + from.username : null;
     const result = await createBooking({
       propertyId: s.data.propertyId,
       channel: 'telegram_bot',
       fullName: s.data.fullName,
       phone: s.data.phone,
       email: s.data.email,
+      telegram: telegramHandle,
       checkIn: s.data.checkIn,
       checkOut: s.data.checkOut,
       guests: s.data.guests,
@@ -350,7 +380,7 @@ async function finalizeBooking(bot, chatId, s, telegramUserId) {
     for (const docType of CONSENT_DOCS) {
       await db.run(
         'INSERT INTO consents (booking_id, telegram_user_id, document_type, document_version) VALUES (?, ?, ?, ?)',
-        [result.bookingId, String(telegramUserId), docType, 'v1']
+        [result.bookingId, String(from.id), docType, 'v1']
       );
     }
 

@@ -1,12 +1,8 @@
 const fetch = require('node-fetch');
 
-async function notifyTelegram(text) {
+async function sendToChat(chatId, text) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
-  if (!token || !chatId) {
-    console.log('[telegram] not configured, skipping notification:\n' + text);
-    return;
-  }
+  if (!token || !chatId) return;
   const url = `https://api.telegram.org/bot${token}/sendMessage`;
   const res = await fetch(url, {
     method: 'POST',
@@ -18,4 +14,25 @@ async function notifyTelegram(text) {
   }
 }
 
-module.exports = { notifyTelegram };
+async function notifyTelegram(text) {
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!chatId) {
+    console.log('[telegram] TELEGRAM_CHAT_ID not set, skipping notification:\n' + text);
+    return;
+  }
+  await sendToChat(chatId, text);
+}
+
+// Отдельный групповой чат/канал менеджера — chat_id, не инвайт-ссылка
+// (t.me/+... не резолвится Bot API в chat_id, нужен реальный числовой ID:
+// добавить бота в группу админом и один раз посмотреть chat_id входящего апдейта).
+async function notifyManagerChannel(text) {
+  const chatId = process.env.TELEGRAM_MANAGER_CHANNEL_ID;
+  if (!chatId) {
+    console.log('[telegram] TELEGRAM_MANAGER_CHANNEL_ID not set, skipping channel notification:\n' + text);
+    return;
+  }
+  await sendToChat(chatId, text);
+}
+
+module.exports = { notifyTelegram, notifyManagerChannel };

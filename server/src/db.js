@@ -82,6 +82,7 @@ const SCHEMA = `
     full_name TEXT NOT NULL,
     phone VARCHAR(32) NOT NULL,
     email VARCHAR(255) NOT NULL,
+    telegram VARCHAR(64),
     check_in VARCHAR(10) NOT NULL,
     check_out VARCHAR(10) NOT NULL,
     guests INT NOT NULL,
@@ -327,6 +328,7 @@ async function addColumnIfMissing(table, column, ddl) {
 async function migrate() {
   await addColumnIfMissing('bookings', 'channel', "channel VARCHAR(16) NOT NULL DEFAULT 'web' AFTER property_id");
   await addColumnIfMissing('bookings', 'deleted', 'deleted TINYINT(1) NOT NULL DEFAULT 0');
+  await addColumnIfMissing('bookings', 'telegram', 'telegram VARCHAR(64) AFTER email');
 }
 
 // Первый /admin-логин наследуется от уже настроенных ADMIN_USER/ADMIN_PASSWORD,

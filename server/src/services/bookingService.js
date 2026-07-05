@@ -1,7 +1,11 @@
 const db = require('../db');
 const yookassa = require('../yookassa');
-const { notifyTelegram } = require('../telegram');
+const { notifyTelegram, notifyManagerChannel } = require('../telegram');
+const email = require('../email');
 const { calculatePricing } = require('./pricing');
+
+const BOT_USERNAME = 'tvoy_apart_bot';
+const MANAGER_EMAIL = 'sale@radegust.ru';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -26,9 +30,11 @@ async function createBooking(input) {
   const {
     propertyId = 1,
     channel = 'web',
+    contactChannel,
     fullName,
     phone,
-    email,
+    email: guestEmail,
+    telegram,
     checkIn,
     checkOut,
     guests,
@@ -40,7 +46,7 @@ async function createBooking(input) {
     consent,
   } = input;
 
-  if (!fullName || !phone || !email || !checkIn || !checkOut || !guests || !payment || !consent) {
+  if (!fullName || !phone || !guestEmail || !checkIn || !checkOut || !guests || !payment || !consent) {
     throw new BookingError('validation', 'missing required fields');
   }
   if (!DATE_RE.test(checkIn) || !DATE_RE.test(checkOut) || checkOut <= checkIn) {
@@ -60,14 +66,15 @@ async function createBooking(input) {
 
   const info = await db.run(
     `INSERT INTO bookings
-     (property_id, channel, full_name, phone, email, check_in, check_out, guests, children, purpose, payment_method, services, comments, status, total_amount, advance_amount)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+     (property_id, channel, full_name, phone, email, telegram, check_in, check_out, guests, children, purpose, payment_method, services, comments, status, total_amount, advance_amount)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
     [
       propertyId,
       channel,
       fullName,
       phone,
-      email,
+      guestEmail,
+      telegram || null,
       checkIn,
       checkOut,
       Number(guests),
@@ -85,9 +92,31 @@ async function createBooking(input) {
   const priceNote = pricing.individual
     ? `${pricing.nights} ноч. — индивидуальные условия, требуют обсуждения с менеджером`
     : `${pricing.nights} ноч. × ${pricing.pricePerNight}₽ = ${pricing.totalAmount}₽, аванс ${pricing.advanceAmount}₽ (${pricing.depositPercent}%)`;
-  await notifyTelegram(
-    `🆕 Новая заявка #${bookingId}\n${fullName}, ${phone}\n${checkIn} → ${checkOut}, гостей: ${guests}\n${priceNote}\nОплата: ${payment}`
-  );
+  const managerText =
+    `🆕 Новая заявка #${bookingId}\n${fullName}, ${phone}\n${checkIn} → ${checkOut}, гостей: ${guests}\n${priceNote}\nОплата: ${payment}`;
+  await notifyTelegram(managerText);
+  await notifyManagerChannel(managerText);
+  await email.sendEmail(MANAGER_EMAIL, `Новая заявка №${bookingId} — Tvoy Apart 24/7`, managerText);
+
+  // Уведомление гостю: либо email, либо телеграм — по его выбору на сайте.
+  // Bot API не даёт написать первым по свободно введённому @handle (нужен
+  // chat_id, который появляется только после того, как гость сам напишет
+  // боту) — поэтому для телеграма отдаём диплинк на бота с id заявки, а сам
+  // бот присылает подтверждение, когда гость по нему перейдёт (см. /start в
+  // bot/index.js). Бронирования из самого бота гость уже уведомляется напрямую
+  // в finalizeBooking, тут это не дублируем.
+  let telegramConfirmUrl = null;
+  if (channel !== 'telegram_bot') {
+    if (contactChannel === 'telegram' && telegram) {
+      telegramConfirmUrl = `https://t.me/${BOT_USERNAME}?start=b${bookingId}`;
+    } else {
+      await email.sendEmail(
+        guestEmail,
+        `Заявка №${bookingId} принята — Tvoy Apart 24/7`,
+        `${fullName}, здравствуйте!\n\nВаша заявка №${bookingId} на ${checkIn} → ${checkOut} принята и обрабатывается.\nМенеджер свяжется с вами для подтверждения.\n\nTvoy Apart 24/7`
+      );
+    }
+  }
 
   let confirmationUrl = null;
   // 30+ ночей — не выставляем автоматический счёт, это персональные условия
@@ -107,7 +136,7 @@ async function createBooking(input) {
     }
   }
 
-  return { bookingId, status: 'pending', confirmationUrl, pricing };
+  return { bookingId, status: 'pending', confirmationUrl, telegramConfirmUrl, pricing };
 }
 
 async function addBookingItems(bookingId, items) {

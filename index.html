@@ -451,7 +451,7 @@
           comments: channelNote + (comments ? '\n' + comments : ''),
           consent: formData.get('consent') === 'on',
           contactChannel: notifyChannel,
-          telegramHandle: telegramHandle || undefined,
+          telegram: telegramHandle || undefined,
         };
 
         var submitBtn = form.querySelector('button[type="submit"]');
@@ -478,6 +478,17 @@
               return;
             }
             form.reset();
+            if (result.data.telegramConfirmUrl) {
+              messageBox.style.display = 'block';
+              messageBox.style.background = '#e8f5e0';
+              messageBox.style.color = '#2e5c1a';
+              messageBox.innerHTML =
+                'Заявка №' + result.data.bookingId + ' принята! Чтобы получать уведомления в Telegram, ' +
+                'перейдите по ссылке и нажмите «Старт» в боте: <a href="' + result.data.telegramConfirmUrl +
+                '" target="_blank" style="color:#2e5c1a;font-weight:bold;">Открыть Telegram</a>';
+              messageBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              return;
+            }
             showMessage('Заявка №' + result.data.bookingId + ' принята! Менеджер свяжется с вами для подтверждения.', true);
           })
           .catch(function () {
