@@ -175,7 +175,10 @@ explicit approve/reject).
 - ~~Username/ID Telegram-канала~~ ✅ `@Tvoy_Apart_24_7`, бот админ
 - ~~Ключ Gemini~~ ✅ получен, проверен вживую
 - ~~TELEGRAM_CHAT_ID (личные уведомления менеджеру)~~ ✅ `719900418`
-- Создать YouTube-канал (когда будет готов — подключим YouTube Data API OAuth)
+- ~~Создать YouTube-канал~~ ✅ `Tvoy_Apart_24_7` создан, YouTube Data API v3
+  подключён (проект `tvoyapart247`, OAuth-клиент `tvoy_apart_bot`), refresh
+  token получен и проверен вживую (`YOUTUBE_CLIENT_ID/SECRET/REFRESH_TOKEN` в
+  `.env` на сервере) — публикация видео в `server/src/content/youtube.js` готова
 - Реквизиты ЮKassa (`shop_id`/`secret_key`) — магазин на регистрации, ждём
 - ~~VPS~~ ✅ получен (IP 185.185.68.210, Ubuntu 26.04 LTS) — прямой SSH-доступ
   из этой облачной сессии невозможен (сетевая политика разрешает только
