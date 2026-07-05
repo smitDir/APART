@@ -13,6 +13,7 @@ const {
 const gemini = require('../ai/gemini');
 const { buildSystemPrompt } = require('../ai/knowledgeBase');
 const conversation = require('../ai/conversation');
+const whisper = require('../ai/whisper');
 
 const PROPERTY_ID = 1; // основной путь — студия
 const BUDGET_PROPERTY_ID = 2; // предлагается, если гость просит подешевле
@@ -87,6 +88,7 @@ function startBot() {
   });
 
   bot.on('message', (msg) => {
+    if (msg.voice) return handleVoiceMessage(bot, msg);
     if (!msg.text || msg.text.startsWith('/')) return;
     const s = session.get(msg.chat.id);
     if (s) return handleTextStep(bot, msg, s);
@@ -95,6 +97,37 @@ function startBot() {
 
   console.log('[bot] started (polling)');
   return bot;
+}
+
+// Голосовое сообщение: скачиваем аудио с серверов Telegram, расшифровываем
+// через Whisper и дальше обрабатываем расшифрованный текст точно так же,
+// как обычное текстовое сообщение (шаг сценария брони или свободный AI-диалог).
+async function handleVoiceMessage(bot, msg) {
+  const chatId = msg.chat.id;
+  if (!whisper.isConfigured()) {
+    return bot.sendMessage(chatId, 'Голосовые сообщения пока не поддерживаются — напишите текстом.');
+  }
+
+  try {
+    const fileLink = await bot.getFileLink(msg.voice.file_id);
+    const audioRes = await fetch(fileLink);
+    const buffer = Buffer.from(await audioRes.arrayBuffer());
+    const text = await whisper.transcribe(buffer);
+
+    if (!text || !text.trim()) {
+      return bot.sendMessage(chatId, 'Не удалось распознать голосовое сообщение. Попробуйте написать текстом.');
+    }
+
+    await bot.sendMessage(chatId, `🎙 Расшифровка: «${text}»`);
+
+    const textMsg = { ...msg, text };
+    const s = session.get(chatId);
+    if (s) return handleTextStep(bot, textMsg, s);
+    return handleFreeformMessage(bot, textMsg);
+  } catch (err) {
+    console.error('[bot] voice transcription failed', err);
+    bot.sendMessage(chatId, 'Не получилось распознать голосовое. Попробуйте написать текстом или /manager.');
+  }
 }
 
 async function handleFreeformMessage(bot, msg) {
