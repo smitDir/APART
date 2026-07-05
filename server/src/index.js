@@ -29,6 +29,11 @@ app.get('/privacy', (req, res) => res.sendFile(path.join(__dirname, '..', 'publi
 app.get('/guest-privacy', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'guest-privacy.html')));
 app.get('/rental-terms', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'rental-terms.html')));
 
+// Лендинг (корень репозитория, на одном домене с API — apart247.ru).
+const REPO_ROOT = path.join(__dirname, '..', '..');
+app.use('/image', express.static(path.join(REPO_ROOT, 'image')));
+app.get('/', (req, res) => res.sendFile(path.join(REPO_ROOT, 'index.html')));
+
 const port = process.env.PORT || 3000;
 
 db.ready
