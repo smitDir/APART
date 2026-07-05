@@ -1,4 +1,5 @@
 require('dotenv').config();
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 
@@ -19,6 +20,10 @@ app.use('/api/webhooks', webhookRouter);
 app.use('/api/admin', adminRouter);
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
+
+// Публичные страницы для верификации Google OAuth (App homepage / Privacy Policy).
+app.get('/about', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'about.html')));
+app.get('/privacy', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'privacy.html')));
 
 const port = process.env.PORT || 3000;
 
