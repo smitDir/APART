@@ -128,6 +128,11 @@ function startBot() {
   });
 
   bot.on('message', (msg) => {
+    // Временный диагностический лог — помогает узнать chat_id новой группы
+    // менеджера для TELEGRAM_MANAGER_CHANNEL_ID. Убрать после настройки.
+    if (msg.chat.type !== 'private') {
+      console.log(`[bot] group message: chat_id=${msg.chat.id} type=${msg.chat.type} title="${msg.chat.title}"`);
+    }
     if (msg.voice) return handleVoiceMessage(bot, msg);
     if (!msg.text || msg.text.startsWith('/')) return;
     const s = session.get(msg.chat.id);
