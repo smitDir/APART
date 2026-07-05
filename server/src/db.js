@@ -94,6 +94,7 @@ const SCHEMA = `
     yookassa_payment_id VARCHAR(255),
     total_amount INT,
     advance_amount INT,
+    deleted TINYINT(1) NOT NULL DEFAULT 0,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -310,16 +311,22 @@ async function seed() {
   }
 }
 
-// Уже развёрнутая БД создавалась до появления bookings.channel — CREATE TABLE
-// IF NOT EXISTS его туда не добавит, нужен явный ALTER для старых установок.
-async function migrate() {
+// Уже развёрнутая БД создавалась до появления некоторых колонок — CREATE TABLE
+// IF NOT EXISTS их туда не добавит, нужен явный ALTER для старых установок.
+async function addColumnIfMissing(table, column, ddl) {
   const [rows] = await pool.query(
     `SELECT COUNT(*) AS n FROM information_schema.columns
-     WHERE table_schema = DATABASE() AND table_name = 'bookings' AND column_name = 'channel'`
+     WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?`,
+    [table, column]
   );
   if (rows[0].n === 0) {
-    await pool.query("ALTER TABLE bookings ADD COLUMN channel VARCHAR(16) NOT NULL DEFAULT 'web' AFTER property_id");
+    await pool.query(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
   }
+}
+
+async function migrate() {
+  await addColumnIfMissing('bookings', 'channel', "channel VARCHAR(16) NOT NULL DEFAULT 'web' AFTER property_id");
+  await addColumnIfMissing('bookings', 'deleted', 'deleted TINYINT(1) NOT NULL DEFAULT 0');
 }
 
 // Первый /admin-логин наследуется от уже настроенных ADMIN_USER/ADMIN_PASSWORD,

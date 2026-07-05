@@ -48,6 +48,14 @@ function pageShell(title, body) {
   .pagination { margin-top: 16px; display: flex; gap: 8px; align-items: center; }
   .pagination a, .pagination span { padding: 6px 12px; border-radius: 5px; background: #f2e6d3; text-decoration: none; }
   .pagination .disabled { opacity: 0.4; pointer-events: none; }
+  tbody tr:nth-child(even) { background: #f3e9d8; }
+  tbody tr:nth-child(odd) { background: #fff; }
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); align-items: center; justify-content: center; z-index: 10; }
+  .modal-overlay.open { display: flex; }
+  .modal-box { background: #fff; padding: 20px 24px; border-radius: 8px; max-width: 320px; }
+  .modal-box .modal-actions { display: flex; gap: 8px; margin-top: 16px; }
+  .modal-box button { flex: 1; }
+  .modal-box button.secondary { background: #ccc; color: #2c2c2c; }
 </style>
 </head>
 <body>
@@ -227,10 +235,9 @@ router.get('/request', requireAdminAuth, async (req, res) => {
         <td>${escapeHtml(b.comments)}</td>
         <td class="row-actions">
           <a href="/admin/request/${b.id}/edit">Изменить</a>
-          <form method="POST" action="/admin/request/${b.id}/delete" onsubmit="return confirm('Удалить заявку #${b.id}?')">
-            <button type="submit" class="danger">Удалить</button>
-          </form>
+          <button type="button" class="danger" onclick="openDeleteModal(${b.id})">Удалить</button>
         </td>
+        <td><input type="checkbox" disabled ${b.deleted ? 'checked' : ''}></td>
       </tr>`
     )
     .join('');
@@ -282,12 +289,33 @@ router.get('/request', requireAdminAuth, async (req, res) => {
             <th>${sortLink(req, 'payment_method', 'Оплата')}</th>
             <th>${sortLink(req, 'total_amount', 'Сумма')}</th>
             <th>${sortLink(req, 'advance_amount', 'Аванс')}</th>
-            <th>Комментарий</th><th>Действия</th>
+            <th>Комментарий</th><th>Действия</th><th>Удалено</th>
           </tr></thead>
-          <tbody>${tableRows || '<tr><td colspan="16">Заявок не найдено.</td></tr>'}</tbody>
+          <tbody>${tableRows || '<tr><td colspan="17">Заявок не найдено.</td></tr>'}</tbody>
         </table>
       </div>
-      ${pagination}`
+      ${pagination}
+      <div id="delete-modal" class="modal-overlay">
+        <div class="modal-box">
+          <p>Удалить заявку <strong id="delete-modal-id"></strong>?</p>
+          <form id="delete-modal-form" method="POST">
+            <div class="modal-actions">
+              <button type="button" class="secondary" onclick="closeDeleteModal()">Отмена</button>
+              <button type="submit" class="danger">Удалить</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <script>
+        function openDeleteModal(id) {
+          document.getElementById('delete-modal-id').textContent = '#' + id;
+          document.getElementById('delete-modal-form').action = '/admin/request/' + id + '/delete';
+          document.getElementById('delete-modal').classList.add('open');
+        }
+        function closeDeleteModal() {
+          document.getElementById('delete-modal').classList.remove('open');
+        }
+      </script>`
     )
   );
 });
@@ -452,13 +480,11 @@ router.post('/request/:id/edit', requireAdminAuth, express.urlencoded({ extended
   res.redirect('/admin/request');
 });
 
+// Мягкое удаление — только выставляет флаг, строка остаётся в БД и в списке
+// (колонка "Удалено" показывает её состояние), это не безвозвратная операция.
 router.post('/request/:id/delete', requireAdminAuth, async (req, res) => {
   const id = Number(req.params.id);
-  await db.transaction(async (tx) => {
-    await tx.run('DELETE FROM booking_items WHERE booking_id = ?', [id]);
-    await tx.run('DELETE FROM consents WHERE booking_id = ?', [id]);
-    await tx.run('DELETE FROM bookings WHERE id = ?', [id]);
-  });
+  await db.run('UPDATE bookings SET deleted = 1 WHERE id = ?', [id]);
   res.redirect('/admin/request');
 });
 
