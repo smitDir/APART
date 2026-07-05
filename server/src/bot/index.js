@@ -22,6 +22,20 @@ const CONSENT_TEXT =
   'условия договора аренды и правила проживания. Нажимая «Согласен», вы принимаете все три документа.';
 const CONSENT_DOCS = ['pd_processing', 'rental_agreement', 'house_rules'];
 
+// Гость вводит дату в привычном ДД.ММ.ГГГГ, а не ISO — конвертируем и заодно
+// отсеиваем несуществующие даты вроде 31.02, которые Date иначе тихо перекатит
+// на март.
+function parseRuDate(text) {
+  const m = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(text.trim());
+  if (!m) return null;
+  const [, dd, mm, yyyy] = m;
+  const iso = `${yyyy}-${mm}-${dd}`;
+  const d = new Date(`${iso}T00:00:00Z`);
+  const valid =
+    d.getUTCFullYear() === Number(yyyy) && d.getUTCMonth() + 1 === Number(mm) && d.getUTCDate() === Number(dd);
+  return valid ? iso : null;
+}
+
 function mainMenuKeyboard() {
   return {
     inline_keyboard: [
@@ -204,23 +218,26 @@ function handleTextStep(bot, msg, s) {
     case 'email':
       s.data.email = text;
       s.step = 'check_in';
-      bot.sendMessage(chatId, 'Дата заезда? (в формате ГГГГ-ММ-ДД, например 2026-08-01)');
+      bot.sendMessage(chatId, 'Дата заезда? (в формате ДД.ММ.ГГГГ, например 01.08.2026)');
       break;
 
-    case 'check_in':
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
-        return bot.sendMessage(chatId, 'Формат даты: ГГГГ-ММ-ДД. Попробуйте ещё раз.');
+    case 'check_in': {
+      const iso = parseRuDate(text);
+      if (!iso) {
+        return bot.sendMessage(chatId, 'Формат даты: ДД.ММ.ГГГГ, например 01.08.2026. Попробуйте ещё раз.');
       }
-      s.data.checkIn = text;
+      s.data.checkIn = iso;
       s.step = 'check_out';
-      bot.sendMessage(chatId, 'Дата выезда? (ГГГГ-ММ-ДД)');
+      bot.sendMessage(chatId, 'Дата выезда? (ДД.ММ.ГГГГ)');
       break;
+    }
 
-    case 'check_out':
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(text) || text <= s.data.checkIn) {
-        return bot.sendMessage(chatId, 'Дата выезда должна быть позже даты заезда, формат ГГГГ-ММ-ДД.');
+    case 'check_out': {
+      const iso = parseRuDate(text);
+      if (!iso || iso <= s.data.checkIn) {
+        return bot.sendMessage(chatId, 'Дата выезда должна быть позже даты заезда, формат ДД.ММ.ГГГГ.');
       }
-      s.data.checkOut = text;
+      s.data.checkOut = iso;
       s.step = 'guests';
       bot.sendMessage(chatId, 'Сколько гостей?', {
         reply_markup: {
@@ -232,6 +249,7 @@ function handleTextStep(bot, msg, s) {
         },
       });
       break;
+    }
 
     default:
       break;
@@ -300,7 +318,13 @@ function handlePayment(bot, chatId, s, method) {
   s.data.payment = method;
   s.step = 'consent';
   bot.sendMessage(chatId, CONSENT_TEXT, {
-    reply_markup: { inline_keyboard: [[{ text: '✅ Согласен', callback_data: 'consent_accept' }]] },
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: '📄 Условия аренды и правила проживания', url: 'https://apart247.ru/rental-terms' }],
+        [{ text: '🔒 Политика конфиденциальности', url: 'https://apart247.ru/guest-privacy' }],
+        [{ text: '✅ Согласен', callback_data: 'consent_accept' }],
+      ],
+    },
   });
 }
 

@@ -25,6 +25,10 @@ app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.get('/about', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'about.html')));
 app.get('/privacy', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'privacy.html')));
 
+// Публичные страницы для гостей (ссылки из формы брони на лендинге и из бота).
+app.get('/guest-privacy', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'guest-privacy.html')));
+app.get('/rental-terms', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'rental-terms.html')));
+
 const port = process.env.PORT || 3000;
 
 db.ready
