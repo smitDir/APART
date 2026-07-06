@@ -241,20 +241,6 @@
     </div>
   </div>
 
-  <div id="channelModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);align-items:center;justify-content:center;z-index:1000;">
-    <div style="background:#fff;padding:24px;border-radius:10px;max-width:360px;width:90%;box-shadow:0 4px 16px rgba(0,0,0,0.2);">
-      <p style="margin:0 0 12px;font-weight:bold;">Выберите канал связи для уведомлений.</p>
-      <label style="display:block;margin-bottom:8px;cursor:pointer;">
-        <input type="radio" name="notifyChannel" value="email" checked/> Электронная почта
-      </label>
-      <label style="display:block;margin-bottom:8px;cursor:pointer;">
-        <input type="radio" name="notifyChannel" value="telegram"/> Telegram
-      </label>
-      <p id="channelModalHint" style="display:none;margin:4px 0 0;font-size:13px;color:#888;">Используем Telegram из поля выше в форме.</p>
-      <button type="button" id="channelModalOk" style="width:100%;padding:10px;background:#4a3728;color:#fff;border:none;border-radius:5px;cursor:pointer;font-family:inherit;margin-top:12px;">Продолжить</button>
-    </div>
-  </div>
-
   <hr style="margin-top:40px;border-color:#c9a96e"/>
 
   <h2>&#128222; Контакты менеджера</h2>
@@ -386,34 +372,7 @@
         return null;
       }
 
-      // Попап выбора канала уведомлений — показывается только после успешной
-      // валидации, перед фактической отправкой заявки.
-      var channelModal = document.getElementById('channelModal');
-      var channelModalOk = document.getElementById('channelModalOk');
-      var channelModalHint = document.getElementById('channelModalHint');
-      var channelRadios = document.querySelectorAll('input[name=notifyChannel]');
       var formTelegramInput = form.querySelector('[name=telegram]');
-
-      function updateTelegramVisibility() {
-        var checked = document.querySelector('input[name=notifyChannel]:checked');
-        channelModalHint.style.display = checked && checked.value === 'telegram' ? 'block' : 'none';
-      }
-      Array.prototype.forEach.call(channelRadios, function (r) {
-        r.addEventListener('change', updateTelegramVisibility);
-      });
-
-      channelModalOk.addEventListener('click', function () {
-        var checked = document.querySelector('input[name=notifyChannel]:checked');
-        var channel = checked ? checked.value : 'email';
-        var telegramHandle = formTelegramInput.value.trim();
-        if (channel === 'telegram' && !telegramHandle) {
-          channelModal.style.display = 'none';
-          showErrorModal('Укажите Telegram в форме выше, чтобы получать уведомления там.', formTelegramInput);
-          return;
-        }
-        channelModal.style.display = 'none';
-        submitBooking(channel, telegramHandle);
-      });
 
       form.addEventListener('submit', function (e) {
         e.preventDefault();
@@ -422,9 +381,9 @@
           showErrorModal(invalid.message, invalid.el);
           return;
         }
-        document.querySelector('input[name=notifyChannel][value=email]').checked = true;
-        updateTelegramVisibility();
-        channelModal.style.display = 'flex';
+        var telegramHandle = formTelegramInput.value.trim();
+        var channel = telegramHandle ? 'telegram' : 'email';
+        submitBooking(channel, telegramHandle);
       });
 
       function submitBooking(notifyChannel, telegramHandle) {
