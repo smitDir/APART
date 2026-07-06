@@ -18,6 +18,12 @@ function getTransporter() {
       connectionTimeout: 8000,
       greetingTimeout: 8000,
       socketTimeout: 8000,
+      // У хостера SMTP_HOST — это CNAME на общий почтовый кластер, чей
+      // сертификат выписан не на SMTP_HOST, а на их собственный домен
+      // (shared-хостинг не делает серт под каждый клиентский поддомен).
+      // servername переопределяет имя, по которому проверяется сертификат,
+      // не отключая саму проверку.
+      tls: process.env.SMTP_TLS_SERVERNAME ? { servername: process.env.SMTP_TLS_SERVERNAME } : undefined,
     });
   }
   return transporter;
