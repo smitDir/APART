@@ -94,14 +94,6 @@ async function createBooking(input) {
     ? `${pricing.nights} ноч. — индивидуальные условия, требуют обсуждения с менеджером`
     : `${pricing.nights} ноч. × ${pricing.pricePerNight}₽ = ${pricing.totalAmount}₽, аванс ${pricing.advanceAmount}₽ (${pricing.depositPercent}%)`;
   const telegramLink = telegram && telegram.startsWith('@') ? `https://t.me/${telegram.slice(1)}` : telegram;
-  const managerText =
-    `🆕 Новая заявка #${bookingId}\n${fullName}, ${phone}\n${checkIn} → ${checkOut}, гостей: ${guests}\n${priceNote}\nОплата: ${payment}\n` +
-    `Email: ${guestEmail}` +
-    (telegramLink ? `\nTelegram: ${telegramLink}` : '') +
-    `\nЗаявка в админке: ${ADMIN_BASE_URL}/request/${bookingId}/edit`;
-  await notifyTelegram(managerText);
-  await notifyManagerChannel(managerText);
-  await email.sendEmail(MANAGER_EMAIL, `Новая заявка №${bookingId} — Tvoy Apart 24/7`, managerText);
 
   // Уведомление гостю: либо email, либо телеграм — по его выбору на сайте.
   // Bot API не даёт написать первым по свободно введённому @handle (нужен
@@ -110,18 +102,38 @@ async function createBooking(input) {
   // бот присылает подтверждение, когда гость по нему перейдёт (см. /start в
   // bot/index.js). Бронирования из самого бота гость уже уведомляется напрямую
   // в finalizeBooking, тут это не дублируем.
+  // Ждём именно эту отправку (а не менеджерские) — только её результат нужен
+  // в ответе API, чтобы лендинг мог сказать "заявка создана, но письмо не ушло"
+  // вместо ложной сетевой ошибки.
   let telegramConfirmUrl = null;
+  let emailSent = null;
   if (channel !== 'telegram_bot') {
     if (contactChannel === 'telegram' && telegram) {
       telegramConfirmUrl = `https://t.me/${BOT_USERNAME}?start=b${bookingId}`;
     } else {
-      await email.sendEmail(
+      emailSent = await email.sendEmail(
         guestEmail,
         `Заявка №${bookingId} принята — Tvoy Apart 24/7`,
         `${fullName}, здравствуйте!\n\nВаша заявка №${bookingId} на ${checkIn} → ${checkOut} принята и обрабатывается.\nМенеджер свяжется с вами для подтверждения.\n\nTvoy Apart 24/7`
       );
     }
   }
+
+  const managerText =
+    `🆕 Новая заявка #${bookingId}\n${fullName}, ${phone}\n${checkIn} → ${checkOut}, гостей: ${guests}\n${priceNote}\nОплата: ${payment}\n` +
+    `Email: ${guestEmail}` +
+    (telegramLink ? `\nTelegram: ${telegramLink}` : '') +
+    `\nЗаявка в админке: ${ADMIN_BASE_URL}/request/${bookingId}/edit` +
+    (emailSent === false ? '\n\n🔴 <b>ОШИБКА: уведомление на почту не удалось отправить</b>' : '');
+  // Менеджерские уведомления не блокируют ответ гостю — фоново, с перехватом
+  // ошибок (иначе зависший SMTP держал бы весь запрос секундами/минутами).
+  notifyTelegram(managerText).catch((err) => console.error('[bookingService] manager telegram notify failed', err));
+  notifyManagerChannel(managerText).catch((err) =>
+    console.error('[bookingService] manager channel notify failed', err)
+  );
+  email
+    .sendEmail(MANAGER_EMAIL, `Новая заявка №${bookingId} — Tvoy Apart 24/7`, managerText)
+    .catch((err) => console.error('[bookingService] manager email failed', err));
 
   let confirmationUrl = null;
   // 30+ ночей — не выставляем автоматический счёт, это персональные условия
@@ -141,7 +153,7 @@ async function createBooking(input) {
     }
   }
 
-  return { bookingId, status: 'pending', confirmationUrl, telegramConfirmUrl, pricing };
+  return { bookingId, status: 'pending', confirmationUrl, telegramConfirmUrl, emailSent, pricing };
 }
 
 async function addBookingItems(bookingId, items) {

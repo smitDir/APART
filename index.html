@@ -489,6 +489,10 @@
               messageBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
               return;
             }
+            if (result.data.emailSent === false) {
+              showMessage('Заявка №' + result.data.bookingId + ' создана, но не удалось отправить уведомление на почту. Менеджер всё равно свяжется с вами, либо позвоните нам напрямую.', true);
+              return;
+            }
             showMessage('Заявка №' + result.data.bookingId + ' принята! Менеджер свяжется с вами для подтверждения.', true);
           })
           .catch(function () {
