@@ -172,6 +172,12 @@ const SCHEMA = `
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
   );
 
+  -- Простые key-value настройки, редактируемые из /admin/settings.
+  CREATE TABLE IF NOT EXISTS settings (
+    setting_key VARCHAR(64) PRIMARY KEY,
+    value VARCHAR(255) NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS scheduled_posts (
     id INT PRIMARY KEY AUTO_INCREMENT,
     channel VARCHAR(32) NOT NULL, -- 'telegram' | 'youtube'

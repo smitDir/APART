@@ -1,7 +1,15 @@
 const nodemailer = require('nodemailer');
+const db = require('./db');
 
 function isConfigured() {
   return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASSWORD);
+}
+
+// Общий рубильник из /admin/settings — по умолчанию включено (нет строки в
+// settings ещё не значит "отключено", это первая настройка, добавленная позже).
+async function notificationsEnabled() {
+  const row = await db.get('SELECT value FROM settings WHERE setting_key = ?', ['emails_enabled']);
+  return !row || row.value !== '0';
 }
 
 let transporter = null;
@@ -32,6 +40,10 @@ function getTransporter() {
 // Возвращает true/false — вызывающий код (bookingService) должен знать,
 // дошло ли письмо, чтобы не молчать об этом перед гостем/менеджером.
 async function sendEmail(to, subject, text) {
+  if (!(await notificationsEnabled())) {
+    console.log(`[email] notifications disabled in admin settings, skipping send to ${to}: ${subject}`);
+    return false;
+  }
   if (!isConfigured()) {
     console.log(`[email] SMTP not configured, skipping send to ${to}: ${subject}\n${text}`);
     return false;

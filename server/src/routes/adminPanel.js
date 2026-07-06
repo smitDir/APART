@@ -256,7 +256,10 @@ router.get('/request', requireAdminAuth, async (req, res) => {
       'Заявки на бронирование',
       `<div class="topbar">
         <h1>Заявки на бронирование (${total})</h1>
-        <form method="POST" action="/admin/logout"><button type="submit">Выйти</button></form>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <a class="btn" href="/admin/settings">Настройки</a>
+          <form method="POST" action="/admin/logout"><button type="submit">Выйти</button></form>
+        </div>
       </div>
       <div class="actions-bar">
         <a class="btn" href="/admin/request/new">+ Добавить заявку</a>
@@ -495,6 +498,38 @@ router.post('/request/:id/delete', requireAdminAuth, async (req, res) => {
   const id = Number(req.params.id);
   await db.run('UPDATE bookings SET deleted = 1 WHERE id = ?', [id]);
   res.redirect('/admin/request');
+});
+
+router.get('/settings', requireAdminAuth, async (req, res) => {
+  const row = await db.get('SELECT value FROM settings WHERE setting_key = ?', ['emails_enabled']);
+  const emailsEnabled = !row || row.value !== '0';
+
+  res.send(
+    pageShell(
+      'Настройки',
+      `<div class="topbar">
+        <h1>Настройки</h1>
+        <form method="POST" action="/admin/logout"><button type="submit">Выйти</button></form>
+      </div>
+      <p><a href="/admin/request">← К заявкам</a></p>
+      <form class="edit" method="POST" action="/admin/settings">
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" name="emails_enabled" style="width:auto;margin:0;" ${emailsEnabled ? 'checked' : ''}>
+          Отправлять уведомления на почту
+        </label>
+        <button type="submit">Сохранить</button>
+      </form>`
+    )
+  );
+});
+
+router.post('/settings', requireAdminAuth, express.urlencoded({ extended: false }), async (req, res) => {
+  const value = req.body.emails_enabled === 'on' ? '1' : '0';
+  await db.run(
+    'INSERT INTO settings (setting_key, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value)',
+    ['emails_enabled', value]
+  );
+  res.redirect('/admin/settings');
 });
 
 module.exports = { router, requireAdminAuth };
