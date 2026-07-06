@@ -89,12 +89,12 @@ function startBot() {
     if (bookingId) return confirmTelegramChannel(bot, msg, bookingId);
     // Кнопка "Забронировать" под постами в канале ведёт сюда (t.me/bot?start=book) —
     // сразу в сценарий брони, а не в общее меню.
-    if (payload === 'book') return beginBooking(bot, msg.chat.id, PROPERTY_ID);
+    if (payload === 'book') return askSubscribe(bot, msg.chat.id, PROPERTY_ID);
     sendMainMenu(bot, msg.chat.id);
   });
   bot.onText(/^\/menu_main$/, (msg) => sendMainMenu(bot, msg.chat.id));
 
-  bot.onText(/\/book/, (msg) => beginBooking(bot, msg.chat.id, PROPERTY_ID));
+  bot.onText(/\/book/, (msg) => askSubscribe(bot, msg.chat.id, PROPERTY_ID));
   bot.onText(/\/manual/, async (msg) => bot.sendMessage(msg.chat.id, await getContent(PROPERTY_ID, 'manual')));
   bot.onText(/\/emergency/, async (msg) =>
     bot.sendMessage(msg.chat.id, await getContent(PROPERTY_ID, 'emergency'))
@@ -111,8 +111,15 @@ function startBot() {
     const data = query.data;
     await bot.answerCallbackQuery(query.id);
 
-    if (data === 'main:book') return beginBooking(bot, chatId, PROPERTY_ID);
-    if (data === 'book_room') return beginBooking(bot, chatId, BUDGET_PROPERTY_ID);
+    if (data === 'main:book') return askSubscribe(bot, chatId, PROPERTY_ID);
+    if (data === 'book_room') return askSubscribe(bot, chatId, BUDGET_PROPERTY_ID);
+    if (data.startsWith('subscribe_yes:')) {
+      await bot.sendMessage(chatId, `Отлично! Подписывайтесь: ${CHANNEL_URL}`);
+      return beginBooking(bot, chatId, Number(data.slice('subscribe_yes:'.length)));
+    }
+    if (data.startsWith('subscribe_no:')) {
+      return beginBooking(bot, chatId, Number(data.slice('subscribe_no:'.length)));
+    }
     if (data === 'main:menu') return showMenuBrowse(bot, chatId);
     if (data === 'main:manual') return bot.sendMessage(chatId, await getContent(PROPERTY_ID, 'manual'));
     if (data === 'main:emergency') return bot.sendMessage(chatId, await getContent(PROPERTY_ID, 'emergency'));
@@ -200,6 +207,21 @@ async function handleFreeformMessage(bot, msg) {
     console.error('[bot] AI reply failed', err);
     bot.sendMessage(chatId, 'Не получилось ответить. Попробуйте /manager, чтобы связаться с менеджером напрямую.');
   }
+}
+
+const CHANNEL_URL = 'https://t.me/Tvoy_Apart_24_7';
+
+// Перед началом брони — предложить подписку на канал; бронирование стартует
+// при любом ответе (да/нет), это не блокирующий шаг, а попутный оффер.
+function askSubscribe(bot, chatId, propertyId) {
+  bot.sendMessage(chatId, 'Прежде чем оформим бронь — хотите подписаться на наш канал, чтобы не пропустить новости и акции?', {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: '✅ Да, подписываюсь', callback_data: `subscribe_yes:${propertyId}` }],
+        [{ text: '➡️ Нет, просто бронируем', callback_data: `subscribe_no:${propertyId}` }],
+      ],
+    },
+  });
 }
 
 function beginBooking(bot, chatId, propertyId) {
