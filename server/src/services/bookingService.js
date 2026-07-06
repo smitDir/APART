@@ -6,6 +6,7 @@ const { calculatePricing } = require('./pricing');
 
 const BOT_USERNAME = 'tvoy_apart_bot';
 const MANAGER_EMAIL = 'info@radegust.ru';
+const ADMIN_BASE_URL = 'https://apart247.ru/admin';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -92,8 +93,12 @@ async function createBooking(input) {
   const priceNote = pricing.individual
     ? `${pricing.nights} ноч. — индивидуальные условия, требуют обсуждения с менеджером`
     : `${pricing.nights} ноч. × ${pricing.pricePerNight}₽ = ${pricing.totalAmount}₽, аванс ${pricing.advanceAmount}₽ (${pricing.depositPercent}%)`;
+  const telegramLink = telegram && telegram.startsWith('@') ? `https://t.me/${telegram.slice(1)}` : telegram;
   const managerText =
-    `🆕 Новая заявка #${bookingId}\n${fullName}, ${phone}\n${checkIn} → ${checkOut}, гостей: ${guests}\n${priceNote}\nОплата: ${payment}`;
+    `🆕 Новая заявка #${bookingId}\n${fullName}, ${phone}\n${checkIn} → ${checkOut}, гостей: ${guests}\n${priceNote}\nОплата: ${payment}\n` +
+    `Email: ${guestEmail}` +
+    (telegramLink ? `\nTelegram: ${telegramLink}` : '') +
+    `\nЗаявка в админке: ${ADMIN_BASE_URL}/request/${bookingId}/edit`;
   await notifyTelegram(managerText);
   await notifyManagerChannel(managerText);
   await email.sendEmail(MANAGER_EMAIL, `Новая заявка №${bookingId} — Tvoy Apart 24/7`, managerText);
