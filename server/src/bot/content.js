@@ -27,7 +27,7 @@ async function getMenuCategories(propertyId) {
 }
 
 const MANAGER_CONTACT =
-  '📞 Телефон: +7 (926) 227-99-55\n✈ Telegram: t.me/+p21HdAFjikg1NDky\n📧 Email: sale@radegust.ru\nВремя работы: ежедневно, 09:00–22:00 (Москва)';
+  '📞 Телефон: +7 (926) 227-99-55\n✈ Telegram: t.me/+p21HdAFjikg1NDky\n📧 Email: info@radegust.ru\nВремя работы: ежедневно, 09:00–22:00 (Москва)';
 
 const CATEGORY_LABELS = {
   breakfast: 'Завтрак',

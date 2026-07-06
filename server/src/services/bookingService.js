@@ -5,7 +5,7 @@ const email = require('../email');
 const { calculatePricing } = require('./pricing');
 
 const BOT_USERNAME = 'tvoy_apart_bot';
-const MANAGER_EMAIL = 'sale@radegust.ru';
+const MANAGER_EMAIL = 'info@radegust.ru';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
