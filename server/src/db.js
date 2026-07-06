@@ -163,6 +163,15 @@ const SCHEMA = `
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
+  -- Хендл -> chat_id, пополняется при любом обращении к боту. Bot API не
+  -- позволяет написать первым тому, кто ни разу не писал боту, — эта таблица
+  -- даёт автоматическую отправку хотя бы тем, кто уже когда-то контактировал.
+  CREATE TABLE IF NOT EXISTS telegram_contacts (
+    handle VARCHAR(64) PRIMARY KEY,
+    chat_id VARCHAR(64) NOT NULL,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS scheduled_posts (
     id INT PRIMARY KEY AUTO_INCREMENT,
     channel VARCHAR(32) NOT NULL, -- 'telegram' | 'youtube'

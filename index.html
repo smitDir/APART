@@ -159,6 +159,9 @@
     <label style="display:block;margin-bottom:5px;font-weight:bold;">Электронная почта <span style="color:red;">*</span></label>
     <input type="email" name="email" required style="width:100%;padding:8px;margin-bottom:15px;border:1px solid #ccc;border-radius:5px;box-sizing:border-box;"/>
 
+    <label style="display:block;margin-bottom:5px;font-weight:bold;">Telegram (необязательно)</label>
+    <input type="text" name="telegram" placeholder="@username" style="width:100%;padding:8px;margin-bottom:15px;border:1px solid #ccc;border-radius:5px;box-sizing:border-box;"/>
+
     <h3>Детали бронирования</h3>
     <label style="display:block;margin-bottom:5px;font-weight:bold;">Дата заезда <span style="color:red;">*</span></label>
     <input type="date" name="checkIn" required style="width:100%;padding:8px;margin-bottom:15px;border:1px solid #ccc;border-radius:5px;box-sizing:border-box;"/>
@@ -247,9 +250,7 @@
       <label style="display:block;margin-bottom:8px;cursor:pointer;">
         <input type="radio" name="notifyChannel" value="telegram"/> Telegram
       </label>
-      <div id="telegramHandleWrap" style="display:none;margin:8px 0 4px;">
-        <input type="text" id="telegramHandleInput" placeholder="@username" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:5px;box-sizing:border-box;"/>
-      </div>
+      <p id="channelModalHint" style="display:none;margin:4px 0 0;font-size:13px;color:#888;">Используем Telegram из поля выше в форме.</p>
       <button type="button" id="channelModalOk" style="width:100%;padding:10px;background:#4a3728;color:#fff;border:none;border-radius:5px;cursor:pointer;font-family:inherit;margin-top:12px;">Продолжить</button>
     </div>
   </div>
@@ -389,13 +390,13 @@
       // валидации, перед фактической отправкой заявки.
       var channelModal = document.getElementById('channelModal');
       var channelModalOk = document.getElementById('channelModalOk');
-      var telegramWrap = document.getElementById('telegramHandleWrap');
-      var telegramInput = document.getElementById('telegramHandleInput');
+      var channelModalHint = document.getElementById('channelModalHint');
       var channelRadios = document.querySelectorAll('input[name=notifyChannel]');
+      var formTelegramInput = form.querySelector('[name=telegram]');
 
       function updateTelegramVisibility() {
         var checked = document.querySelector('input[name=notifyChannel]:checked');
-        telegramWrap.style.display = checked && checked.value === 'telegram' ? 'block' : 'none';
+        channelModalHint.style.display = checked && checked.value === 'telegram' ? 'block' : 'none';
       }
       Array.prototype.forEach.call(channelRadios, function (r) {
         r.addEventListener('change', updateTelegramVisibility);
@@ -404,13 +405,11 @@
       channelModalOk.addEventListener('click', function () {
         var checked = document.querySelector('input[name=notifyChannel]:checked');
         var channel = checked ? checked.value : 'email';
-        var telegramHandle = '';
-        if (channel === 'telegram') {
-          telegramHandle = telegramInput.value.trim();
-          if (!telegramHandle) {
-            telegramInput.focus();
-            return;
-          }
+        var telegramHandle = formTelegramInput.value.trim();
+        if (channel === 'telegram' && !telegramHandle) {
+          channelModal.style.display = 'none';
+          showErrorModal('Укажите Telegram в форме выше, чтобы получать уведомления там.', formTelegramInput);
+          return;
         }
         channelModal.style.display = 'none';
         submitBooking(channel, telegramHandle);
@@ -424,7 +423,6 @@
           return;
         }
         document.querySelector('input[name=notifyChannel][value=email]').checked = true;
-        telegramInput.value = '';
         updateTelegramVisibility();
         channelModal.style.display = 'flex';
       });
@@ -478,19 +476,12 @@
               return;
             }
             form.reset();
-            if (result.data.telegramConfirmUrl) {
-              messageBox.style.display = 'block';
-              messageBox.style.background = '#e8f5e0';
-              messageBox.style.color = '#2e5c1a';
-              messageBox.innerHTML =
-                'Заявка №' + result.data.bookingId + ' принята! Чтобы получать уведомления в Telegram, ' +
-                'перейдите по ссылке и нажмите «Старт» в боте: <a href="' + result.data.telegramConfirmUrl +
-                '" target="_blank" style="color:#2e5c1a;font-weight:bold;">Открыть Telegram</a>';
-              messageBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            if (result.data.telegramSent === true) {
+              showMessage('Заявка №' + result.data.bookingId + ' принята! Подтверждение отправлено вам в Telegram.', true);
               return;
             }
             if (result.data.emailSent === false) {
-              showMessage('Заявка №' + result.data.bookingId + ' создана, но не удалось отправить уведомление на почту. Менеджер всё равно свяжется с вами, либо позвоните нам напрямую.', true);
+              showMessage('Заявка №' + result.data.bookingId + ' создана, но не удалось отправить уведомление. Менеджер всё равно свяжется с вами, либо позвоните нам напрямую.', true);
               return;
             }
             showMessage('Заявка №' + result.data.bookingId + ' принята! Менеджер свяжется с вами для подтверждения.', true);

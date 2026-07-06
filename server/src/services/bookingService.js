@@ -1,10 +1,9 @@
 const db = require('../db');
 const yookassa = require('../yookassa');
-const { notifyTelegram, notifyManagerChannel } = require('../telegram');
+const { notifyTelegram, notifyManagerChannel, sendToChat } = require('../telegram');
 const email = require('../email');
 const { calculatePricing } = require('./pricing');
 
-const BOT_USERNAME = 'tvoy_apart_bot';
 const MANAGER_EMAIL = 'info@radegust.ru';
 const ADMIN_BASE_URL = 'https://apart247.ru/admin';
 
@@ -95,22 +94,31 @@ async function createBooking(input) {
     : `${pricing.nights} ноч. × ${pricing.pricePerNight}₽ = ${pricing.totalAmount}₽, аванс ${pricing.advanceAmount}₽ (${pricing.depositPercent}%)`;
   const telegramLink = telegram && telegram.startsWith('@') ? `https://t.me/${telegram.slice(1)}` : telegram;
 
-  // Уведомление гостю: либо email, либо телеграм — по его выбору на сайте.
-  // Bot API не даёт написать первым по свободно введённому @handle (нужен
-  // chat_id, который появляется только после того, как гость сам напишет
-  // боту) — поэтому для телеграма отдаём диплинк на бота с id заявки, а сам
-  // бот присылает подтверждение, когда гость по нему перейдёт (см. /start в
-  // bot/index.js). Бронирования из самого бота гость уже уведомляется напрямую
-  // в finalizeBooking, тут это не дублируем.
+  // Уведомление гостю: либо телеграм, либо email — по его выбору на сайте.
+  // Telegram — только если гость уже когда-либо писал боту (таблица
+  // telegram_contacts, пополняется в bot/index.js при любом обращении к
+  // боту) — Bot API физически не даёт написать первым тому, кто ни разу не
+  // начинал диалог, обойти это нельзя никаким кодом. Если хендл боту
+  // незнаком — падаем на email, чтобы гость не остался вообще без ответа.
   // Ждём именно эту отправку (а не менеджерские) — только её результат нужен
   // в ответе API, чтобы лендинг мог сказать "заявка создана, но письмо не ушло"
   // вместо ложной сетевой ошибки.
-  let telegramConfirmUrl = null;
+  let telegramSent = null;
   let emailSent = null;
   if (channel !== 'telegram_bot') {
-    if (contactChannel === 'telegram' && telegram) {
-      telegramConfirmUrl = `https://t.me/${BOT_USERNAME}?start=b${bookingId}`;
-    } else {
+    const handle = telegram && (telegram.startsWith('@') ? telegram : `@${telegram}`);
+    const contact = contactChannel === 'telegram' && handle ? await db.get(
+      'SELECT chat_id FROM telegram_contacts WHERE handle = ?',
+      [handle]
+    ) : null;
+
+    if (contact) {
+      telegramSent = await sendToChat(
+        contact.chat_id,
+        `Заявка №${bookingId} принята и обрабатывается.\n${fullName}, ${checkIn} → ${checkOut}.\nМенеджер свяжется с вами для подтверждения.`
+      );
+    }
+    if (!telegramSent) {
       emailSent = await email.sendEmail(
         guestEmail,
         `Заявка №${bookingId} принята — Tvoy Apart 24/7`,
@@ -153,7 +161,7 @@ async function createBooking(input) {
     }
   }
 
-  return { bookingId, status: 'pending', confirmationUrl, telegramConfirmUrl, emailSent, pricing };
+  return { bookingId, status: 'pending', confirmationUrl, telegramSent, emailSent, pricing };
 }
 
 async function addBookingItems(bookingId, items) {

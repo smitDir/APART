@@ -2,15 +2,22 @@ const fetch = require('node-fetch');
 
 async function sendToChat(chatId, text) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
-  if (!token || !chatId) return;
+  if (!token || !chatId) return false;
   const url = `https://api.telegram.org/bot${token}/sendMessage`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
-  });
-  if (!res.ok) {
-    console.error('[telegram] send failed', res.status, await res.text());
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
+    });
+    if (!res.ok) {
+      console.error('[telegram] send failed', res.status, await res.text());
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('[telegram] send failed', err);
+    return false;
   }
 }
 
@@ -35,4 +42,4 @@ async function notifyManagerChannel(text) {
   await sendToChat(chatId, text);
 }
 
-module.exports = { notifyTelegram, notifyManagerChannel };
+module.exports = { notifyTelegram, notifyManagerChannel, sendToChat };

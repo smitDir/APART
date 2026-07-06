@@ -56,21 +56,14 @@ function sendMainMenu(bot, chatId) {
   });
 }
 
-// Гость выбрал на сайте «уведомлять в Telegram» — Bot API не может написать
-// первым по свободно введённому @handle (нужен chat_id, который появляется
-// только когда сам гость напишет боту), поэтому сайт даёт ссылку-диплинк
-// вида t.me/bot?start=b<id>, и подтверждение приходит именно здесь, по факту перехода.
-async function confirmTelegramChannel(bot, msg, bookingId) {
-  const booking = await db.get('SELECT * FROM bookings WHERE id = ?', [bookingId]);
-  if (!booking) {
-    return bot.sendMessage(msg.chat.id, 'Не нашли такую заявку. Если это ошибка — напишите менеджеру /manager.');
-  }
-  const handle = msg.from.username ? '@' + msg.from.username : `chat:${msg.chat.id}`;
-  await db.run('UPDATE bookings SET telegram = ? WHERE id = ?', [handle, bookingId]);
-  bot.sendMessage(
-    msg.chat.id,
-    `Заявка №${bookingId} принята и обрабатывается.\n${booking.full_name}, ${booking.check_in} → ${booking.check_out}.\n` +
-      'Будем присылать уведомления сюда, в Telegram.'
+// Хендл -> chat_id, чтобы сайт мог автоматически отправить уведомление в
+// Telegram гостю, который уже когда-либо писал боту (см. bookingService.js —
+// Bot API не даёт написать первым тому, кто ни разу не начинал диалог).
+async function rememberTelegramContact(chatId, from) {
+  if (!from || !from.username) return;
+  await db.run(
+    'INSERT INTO telegram_contacts (handle, chat_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE chat_id = VALUES(chat_id)',
+    [`@${from.username}`, String(chatId)]
   );
 }
 
@@ -85,8 +78,6 @@ function startBot() {
 
   bot.onText(/^\/start(?:\s+(\S+))?$/, (msg, match) => {
     const payload = match[1];
-    const bookingId = payload && /^b\d+$/.test(payload) ? Number(payload.slice(1)) : null;
-    if (bookingId) return confirmTelegramChannel(bot, msg, bookingId);
     // Кнопка "Забронировать" под постами в канале ведёт сюда (t.me/bot?start=book) —
     // сразу в сценарий брони, а не в общее меню.
     if (payload === 'book') return askSubscribe(bot, msg.chat.id, PROPERTY_ID);
@@ -110,6 +101,7 @@ function startBot() {
     const chatId = query.message.chat.id;
     const data = query.data;
     await bot.answerCallbackQuery(query.id);
+    rememberTelegramContact(chatId, query.from).catch((err) => console.error('[bot] remember contact failed', err));
 
     if (data === 'main:book') return askSubscribe(bot, chatId, PROPERTY_ID);
     if (data === 'book_room') return askSubscribe(bot, chatId, BUDGET_PROPERTY_ID);
@@ -138,6 +130,9 @@ function startBot() {
   });
 
   bot.on('message', (msg) => {
+    if (msg.chat.type === 'private') {
+      rememberTelegramContact(msg.chat.id, msg.from).catch((err) => console.error('[bot] remember contact failed', err));
+    }
     if (msg.voice) return handleVoiceMessage(bot, msg);
     if (!msg.text || msg.text.startsWith('/')) return;
     const s = session.get(msg.chat.id);
