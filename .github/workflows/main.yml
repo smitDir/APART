@@ -1,0 +1,68 @@
+name: Deploy Static Site with Backup and Rollback 🚀
+
+on:
+  push:
+    branches:
+      - main # Разворачиваем только ветку main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Шаг 0: Получение кода из репозитория
+      - name: Checkout code 📦
+        uses: actions/checkout@v4
+
+      # Шаг 1: Настройка SSH агента
+      - name: Setup SSH agent ⚙️
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      # Шаг 2: Создание резервной копии перед деплоем 🛡️
+      # ВНИМАНИЕ! Этот шаг создаёт архив ТЕКУЩЕЙ директории на виртуальной машине GitHub,
+      # а не сервера. При распаковке он полностью перезапишет директорию /var/www/apart247.ru/
+      # Поэтому убедитесь, что там нет файлов, которых нет в вашем репозитории!
+      - name: Create backup before deployment 🛡️
+        run: |
+          TIMESTAMP=$(date +%Y%m%d-%H%M)
+          ARCHIVE_NAME="backup-$TIMESTAMP.tar.gz"
+          echo "Creating backup of current repo to $ARCHIVE_NAME..."
+          tar czf "/var/www/apart247.ru/backup/$ARCHIVE_NAME" .
+
+      # Шаг 3: Копирование файлов на сервер ✨
+      # Флаг --delete удалит все лишние файлы на сервере.
+      # Убедитесь, что вы добавили исключения для секретных файлов (.env).
+      - name: Overwrite files on server ✨
+        run: |
+          rsync -avz \
+            --exclude='node_modules/' \   # Исключите временные папки
+            --exclude='logs/' \          # Лог-файлы должны быть на сервере
+            --exclude='*.tar.gz' \       # Не нужно копировать бэкапы
+            --exclude='.env' \           # ВАЖНО: добавьте сюда свои секретные файлы
+            --delete ./ codex_apart247@your-server:/var/www/apart247.ru/
+
+      # Шаг 4: Хелс-чек ✅
+      # ПРОВЕРЬТЕ ЭТОТ URL И СОЗДАЙТЕ ФАЙЛ .well-known/status НА СЕРВЕРЕ
+      - name: Health check ✅
+        if: always()
+        run: |
+          HEALTH_ENDPOINT="https://apart247.ru/.well-known/status"
+          for i in {1..6}; do
+            RESPONSE_CODE=$(curl -o /dev/null -s -w "%{http_code}" "$HEALTH_ENDPOINT")
+            echo "🔹 Attempt $i: HTTP Code = $RESPONSE_CODE"
+            if [[ "$RESPONSE_CODE" == "200" ]]; then
+              echo "✅ Service is healthy."
+              exit 0 # Успех!
+            fi
+            sleep 5 # Ждём 5 секунд между попытками
+          done
+          echo "❌ Health check failed after multiple attempts."
+          exit 1 # Ошибка заставит сработывать следующий шаг отката
+
+      # Шаг 5: Автоматический откат при сбое 🔁
+      - name: Rollback on failure 🔁
+        if: failure() # Выполняется только если хелс-чек упал
+        run: |
+          LATEST_BACKUP=$(ssh codex_apart247@your-server 'ls -t /var/www/apart247.
