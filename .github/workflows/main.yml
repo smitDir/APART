@@ -14,11 +14,13 @@ jobs:
       - name: Checkout code 📦
         uses: actions/checkout@v4
 
-      # Шаг 1: Настройка SSH агента
+      # Шаг 1: Настройка SSH агента (стандартный встроенный способ)
       - name: Setup SSH agent ⚙️
-        uses: webfactory/ssh-agent@v0.8.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          echo ${{ secrets.SSH_PRIVATE_KEY }} | tr -d '\r' > $HOME/.ssh/id_rsa
+          chmod 600 $HOME/.ssh/id_rsa
+          eval $(ssh-agent -a /tmp/ssh_agent.sock)
+          ssh-add $HOME/.ssh/id_rsa
 
       # Шаг 2: Создание резервной копии перед деплоем 🛡️
       # ВНИМАНИЕ! Этот шаг создаёт архив ТЕКУЩЕЙ директории на виртуальной машине GitHub,
