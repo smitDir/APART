@@ -19,6 +19,10 @@ jobs:
         run: |
           mkdir -p $HOME/.ssh # <--- Создаём директорию
           chmod 700 $HOME/.ssh # <--- Устанавливаем строгие права
+
+          # Загружаем отпечатки сервера из секрета
+          echo "${{ secrets.SSH_KNOWN_HOSTS }}" > $HOME/.ssh/known_hosts
+          
           echo "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' > $HOME/.ssh/id_rsa # <--- Кавычки обязательны!
           chmod 600 $HOME/.ssh/id_rsa
           
