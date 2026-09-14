@@ -17,6 +17,8 @@ jobs:
       # Шаг 1: Настройка SSH агента ⚙️
       - name: Setup SSH agent ✨
         run: |
+          mkdir -p $HOME/.ssh # <--- Создаём директорию
+          chmod 700 $HOME/.ssh # <--- Устанавливаем строгие права
           echo "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' > $HOME/.ssh/id_rsa # <--- Кавычки обязательны!
           chmod 600 $HOME/.ssh/id_rsa
           eval $(ssh-agent -a /tmp/ssh_agent.sock)
