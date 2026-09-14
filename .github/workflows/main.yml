@@ -21,8 +21,12 @@ jobs:
           chmod 700 $HOME/.ssh # <--- Устанавливаем строгие права
           echo "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' > $HOME/.ssh/id_rsa # <--- Кавычки обязательны!
           chmod 600 $HOME/.ssh/id_rsa
+          
+          # Запускаем агент
           eval $(ssh-agent -a /tmp/ssh_agent.sock)
-          ssh-add -- <(echo ${{ secrets.SSH_PRIVATE_KEY_PASSPHRASE }}) $HOME/.ssh/id_rsa
+
+          # Передаём пароль через stdin
+          printf "%s\n" ${{ secrets.SSH_PRIVATE_KEY_PASSPHRASE }} | ssh-add $HOME/.ssh/id_rsa
 
       # Шаг 2: Создание резервной копии перед деплоем 🛡️
       # ВАЖНО: Архивирование происходит НА СЕРВЕРЕ
