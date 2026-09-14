@@ -41,28 +41,32 @@ jobs:
             --exclude='logs/' \          # Лог-файлы должны быть на сервере
             --exclude='*.tar.gz' \       # Не нужно копировать бэкапы
             --exclude='.env' \           # ВАЖНО: добавьте сюда свои секретные файлы
-            --delete ./ codex_apart247@your-server:/var/www/apart247.ru/
+            --delete ./ codex_apart247@186.246.50.81:/var/www/apart247.ru/
 
       # Шаг 4: Хелс-чек ✅
-      # ПРОВЕРЬТЕ ЭТОТ URL И СОЗДАЙТЕ ФАЙЛ .well-known/status НА СЕРВЕРЕ
-      - name: Health check ✅
-        if: always()
-        run: |
-          HEALTH_ENDPOINT="https://apart247.ru/.well-known/status"
-          for i in {1..6}; do
-            RESPONSE_CODE=$(curl -o /dev/null -s -w "%{http_code}" "$HEALTH_ENDPOINT")
-            echo "🔹 Attempt $i: HTTP Code = $RESPONSE_CODE"
-            if [[ "$RESPONSE_CODE" == "200" ]]; then
-              echo "✅ Service is healthy."
-              exit 0 # Успех!
-            fi
-            sleep 5 # Ждём 5 секунд между попытками
-          done
-          echo "❌ Health check failed after multiple attempts."
-          exit 1 # Ошибка заставит сработывать следующий шаг отката
+          if: always() # Этот шаг выполняется ВСЕГДА после развёртывания
+          run: |
+            HEALTH_ENDPOINT="https://apart247.ru" # Проверка корня сайта
+            
+            # Ждём до 6 попыток по 10 секунд = максимум 1 минута ожидания
+            for i in {1..6}; do
+              RESPONSE_CODE=$(curl -o /dev/null -s -w "%{http_code}" "$HEALTH_ENDPOINT")
+              
+              echo "🔹 Attempt $i: HTTP Code = $RESPONSE_CODE"
+          
+              if [[ "$RESPONSE_CODE" == "200" ]]; then
+                echo "✅ Service is healthy."
+                exit 0 # Успешное завершение пайплайна
+              fi
+          
+              sleep 10 # Пауза перед следующей попыткой
+            done
+          
+            echo "❌ Health check failed after multiple attempts."
+            exit 1 # Ошибка заставит сработывать следующий шаг отката
 
       # Шаг 5: Автоматический откат при сбое 🔁
       - name: Rollback on failure 🔁
         if: failure() # Выполняется только если хелс-чек упал
         run: |
-          LATEST_BACKUP=$(ssh codex_apart247@your-server 'ls -t /var/www/apart247.
+          LATEST_BACKUP=$(ssh codex_apart247@186.246.50.81 'ls -t /var/www/apart247.
