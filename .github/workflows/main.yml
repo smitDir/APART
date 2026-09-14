@@ -25,14 +25,15 @@ jobs:
       # Шаг 2: Создание резервной копии перед деплоем 🛡️
       # ВНИМАНИЕ! Этот шаг создаёт архив ТЕКУЩЕЙ директории на виртуальной машине GitHub,
       # а не сервера. При распаковке он полностью перезапишет директорию /var/www/apart247.ru/
-      # Поэтому убедитесь, что там нет файлов, которых нет в вашем репозитории!
       - name: Create backup before deployment 🛡️
         run: |
           TIMESTAMP=$(date +%Y%m%d-%H%M)
           ARCHIVE_NAME="backup-$TIMESTAMP.tar.gz"
-          echo "Creating backup of current repo to $ARCHIVE_NAME..."
-          tar czf "/var/www/apart247.ru/backup/$ARCHIVE_NAME" .
-
+          
+          # Подключаемся к серверу и создаем архив ТАМ
+          ssh codex_apart247@186.246.50.81 << EOF
+            cd /var/www/apart247.ru && tar czf ./backup/$ARCHIVE_NAME html
+          EOF
       # Шаг 3: Копирование файлов на сервер ✨
       # Флаг --delete удалит все лишние файлы на сервере.
       - name: Overwrite files on server 📦→💻
