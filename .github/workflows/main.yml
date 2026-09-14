@@ -47,7 +47,7 @@ jobs:
       # Флаг --delete удалит все лишние файлы на сервере.
       - name: Overwrite files on server ✨
         run: |
-          RSYNC_OPTS="-avz --delete --exclude='logs/' --exclude='*.tar.gz' --exclude='/backup/*'"
+          RSYNC_OPTS="-avz --delete --exclude='logs/' --exclude='.ssh/' --exclude='.ssh/authorized_keys' --exclude='*.tar.gz' --exclude='/backup/*'"
           
           # Используем echo для наглядности логов, саму команду rsync пишем одной строкой
           echo "🚀 Running rsync with options: $RSYNC_OPTS"
