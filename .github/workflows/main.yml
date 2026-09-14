@@ -17,7 +17,7 @@ jobs:
       # Шаг 1: Настройка SSH агента ⚙️
       - name: Setup SSH agent ✨
         run: |
-          echo ${{ secrets.SSH_PRIVATE_KEY }} | tr -d '\r' > $HOME/.ssh/id_rsa
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' > $HOME/.ssh/id_rsa # <--- Кавычки обязательны!
           chmod 600 $HOME/.ssh/id_rsa
           eval $(ssh-agent -a /tmp/ssh_agent.sock)
           ssh-add $HOME/.ssh/id_rsa
