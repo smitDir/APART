@@ -14,8 +14,8 @@ jobs:
       - name: Checkout code 📦
         uses: actions/checkout@v4
 
-      # Шаг 1: Настройка SSH агента (стандартный встроенный способ)
-      - name: Setup SSH agent ⚙️
+      # Шаг 1: Настройка SSH агента ⚙️
+      - name: Setup SSH agent ✨
         run: |
           echo ${{ secrets.SSH_PRIVATE_KEY }} | tr -d '\r' > $HOME/.ssh/id_rsa
           chmod 600 $HOME/.ssh/id_rsa
@@ -23,20 +23,19 @@ jobs:
           ssh-add $HOME/.ssh/id_rsa
 
       # Шаг 2: Создание резервной копии перед деплоем 🛡️
-      # ВНИМАНИЕ! Этот шаг создаёт архив ТЕКУЩЕЙ директории на виртуальной машине GitHub,
-      # а не сервера. При распаковке он полностью перезапишет директорию /var/www/apart247.ru/
+      # ВАЖНО: Архивирование происходит НА СЕРВЕРЕ
       - name: Create backup before deployment 🛡️
         run: |
           TIMESTAMP=$(date +%Y%m%d-%H%M)
           ARCHIVE_NAME="backup-$TIMESTAMP.tar.gz"
-          
-          # Подключаемся к серверу и создаем архив ТАМ
+
           ssh codex_apart247@186.246.50.81 << EOF
             cd /var/www/apart247.ru && tar czf ./backup/$ARCHIVE_NAME html
           EOF
-      # Шаг 3: Копирование файлов на сервер ✨
+
+      # Шаг 3: Копирование файлов проекта на сервер ✨
       # Флаг --delete удалит все лишние файлы на сервере.
-      - name: Overwrite files on server 📦→💻
+      - name: Overwrite files on server ✨
         run: |
           rsync -avz \
             --exclude='logs/' \              # Исключаем лог-файлы
@@ -45,29 +44,41 @@ jobs:
             --delete ./ codex_apart247@186.246.50.81:/var/www/apart247.ru/html/
 
       # Шаг 4: Хелс-чек ✅
-          if: always() # Этот шаг выполняется ВСЕГДА после развёртывания
-          run: |
-            HEALTH_ENDPOINT="https://apart247.ru" # Проверка корня сайта
-            
-            # Ждём до 6 попыток по 10 секунд = максимум 1 минута ожидания
-            for i in {1..6}; do
-              RESPONSE_CODE=$(curl -o /dev/null -s -w "%{http_code}" "$HEALTH_ENDPOINT")
-              
-              echo "🔹 Attempt $i: HTTP Code = $RESPONSE_CODE"
-          
-              if [[ "$RESPONSE_CODE" == "200" ]]; then
-                echo "✅ Service is healthy."
-                exit 0 # Успешное завершение пайплайна
-              fi
-          
-              sleep 10 # Пауза перед следующей попыткой
-            done
-          
-            echo "❌ Health check failed after multiple attempts."
-            exit 1 # Ошибка заставит сработывать следующий шаг отката
+      # ПРОВЕРЬТЕ ЭТОТ URL И СОЗДАЙТЕ ФАЙЛ status НА СЕРВЕРЕ
+      - name: Health check ✅
+        if: always()
+        run: |
+          HEALTH_ENDPOINT="https://apart247.ru/.well-known/status"
+          for i in {1..6}; do
+            RESPONSE_CODE=$(curl -o /dev/null -s -w "%{http_code}" "$HEALTH_ENDPOINT")
+            echo "🔹 Attempt $i: HTTP Code = $RESPONSE_CODE"
+            if [[ "$RESPONSE_CODE" == "200" ]]; then
+              echo "✅ Service is healthy."
+              exit 0 # Успех!
+            fi
+            sleep 5 # Пауза между попытками
+          done
+          echo "❌ Health check failed after multiple attempts."
+          exit 1 # Ошибка заставит сработывать следующий шаг отката
 
       # Шаг 5: Автоматический откат при сбое 🔁
       - name: Rollback on failure 🔁
         if: failure() # Выполняется только если хелс-чек упал
         run: |
-          LATEST_BACKUP=$(ssh codex_apart247@186.246.50.81 'ls -t /var/www/apart247.
+          LATEST_BACKUP=$(ssh codex_apart247@186.246.50.81 'ls -t /var/www/apart247.ru/backup/*.tar.gz | head -n1')
+
+          # Проверяем, существует ли хотя бы одна резервная копия
+          if [ -z "$LATEST_BACKUP" ]; then
+            echo "No backups found. Skipping rollback."
+            exit 0
+          fi
+
+          echo "Deployment or health check failed. Rolling back from $LATEST_BACKUP..."
+
+          # Удаляем текущее содержимое сайта
+          ssh codex_apart247@186.246.50.81 "rm -rf /var/www/apart247.ru/html/*"
+
+          # Восстанавливаем последнюю версию
+          ssh codex_apart247@186.246.50.81 "cd /var/www/apart247.ru && tar xzf \$LATEST_BACKUP html"
+
+          echo "✅ Rollback completed successfully."
