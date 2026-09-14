@@ -47,11 +47,12 @@ jobs:
       # Флаг --delete удалит все лишние файлы на сервере.
       - name: Overwrite files on server ✨
         run: |
-          rsync -avz \
-            --exclude='logs/' \              # Исключаем лог-файлы
-            --exclude='*.tar.gz' \          # Не архивируем свои же бэкапы
-            --exclude='/backup/*'           # Защищаем папку с резервными копиями
-            ./ codex_apart247@186.246.50.81:/var/www/apart247.ru/html/
+          RSYNC_OPTS="-avz --delete --exclude='logs/' --exclude='*.tar.gz' --exclude='/backup/*'"
+          
+          # Используем echo для наглядности логов, саму команду rsync пишем одной строкой
+          echo "🚀 Running rsync with options: $RSYNC_OPTS"
+          
+          rsync $RSYNC_OPTS ./ codex_apart247@186.246.50.81:/var/www/apart247.ru/html/
 
       # Шаг 4: Хелс-чек ✅
       # ПРОВЕРЬТЕ ЭТОТ URL И СОЗДАЙТЕ ФАЙЛ status НА СЕРВЕРЕ
