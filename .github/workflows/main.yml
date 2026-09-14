@@ -55,10 +55,11 @@ jobs:
 
       # Шаг 4: Хелс-чек ✅
       # ПРОВЕРЬТЕ ЭТОТ URL И СОЗДАЙТЕ ФАЙЛ status НА СЕРВЕРЕ
+      # Шаг: Health check ✅
       - name: Health check ✅
         if: always()
         run: |
-          HEALTH_ENDPOINT="https://apart247.ru/.well-known/status"
+          HEALTH_ENDPOINT="https://apart247.ru/" # <--- Замените эту строку!
           for i in {1..6}; do
             RESPONSE_CODE=$(curl -o /dev/null -s -w "%{http_code}" "$HEALTH_ENDPOINT")
             echo "🔹 Attempt $i: HTTP Code = $RESPONSE_CODE"
@@ -69,7 +70,7 @@ jobs:
             sleep 5 # Пауза между попытками
           done
           echo "❌ Health check failed after multiple attempts."
-          exit 1 # Ошибка заставит сработывать следующий шаг отката
+          exit 1 # Ошибка заставит сработывать откат.
 
       # Шаг 5: Автоматический откат при сбое 🔁
       - name: Rollback on failure 🔁
